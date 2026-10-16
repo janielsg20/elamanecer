@@ -17,10 +17,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircle
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.RemoveCircleOutline
+import androidx.compose.material.icons.filled.Warning
+import com.example.domain.icon.ProductIconView
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -214,10 +222,10 @@ fun StockBadge(
   minStock: Double,
   modifier: Modifier = Modifier,
 ) {
-  val (badgeText, badgeColor, containerColor) = when {
-    currentStock <= 0.0 -> Triple("Agotado", DangerRed, DangerRed.copy(alpha = 0.12f))
-    minStock > 0 && currentStock <= minStock -> Triple("Stock bajo", WarningOrange, WarningOrange.copy(alpha = 0.15f))
-    else -> Triple("Disponible", SuccessGreen, SuccessGreen.copy(alpha = 0.12f))
+  val (badgeText, badgeColor, containerColor, badgeIcon) = when {
+    currentStock <= 0.0 -> Quadruple("Agotado", DangerRed, DangerRed.copy(alpha = 0.12f), Icons.Default.RemoveCircleOutline)
+    minStock > 0 && currentStock <= minStock -> Quadruple("Stock bajo", WarningOrange, WarningOrange.copy(alpha = 0.15f), Icons.Default.Warning)
+    else -> Quadruple("Disponible", SuccessGreen, SuccessGreen.copy(alpha = 0.12f), Icons.Default.CheckCircle)
   }
 
   Surface(
@@ -225,15 +233,23 @@ fun StockBadge(
     shape = RoundedCornerShape(6.dp),
     color = containerColor,
   ) {
-    Text(
-      text = badgeText,
-      color = badgeColor,
-      style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+    Row(
       modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-      maxLines = 1,
-    )
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+      Icon(badgeIcon, contentDescription = null, tint = badgeColor, modifier = Modifier.size(11.dp))
+      Text(
+        text = badgeText,
+        color = badgeColor,
+        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+        maxLines = 1,
+      )
+    }
   }
 }
+
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 @Composable
 fun ExpandableInventoryCard(
@@ -267,22 +283,35 @@ fun ExpandableInventoryCard(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
       ) {
-        Column(modifier = Modifier.weight(1f)) {
-          Text(
-            text = item.productName,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        Row(
+          modifier = Modifier.weight(1f),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+          ProductIconView(
+            productName = item.productName,
+            categoryName = item.categoryName,
+            size = 40.dp,
+            iconSize = 22.dp,
           )
-          Text(
-            text = "${item.categoryName} • ${item.unitOfMeasure}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
+          Column(modifier = Modifier.weight(1f)) {
+            Text(
+              text = item.productName,
+              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+              color = MaterialTheme.colorScheme.onSurface,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+              text = "${item.categoryName} • ${item.unitOfMeasure}",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
         }
+        Spacer(modifier = Modifier.width(6.dp))
         Icon(
           imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
           contentDescription = if (expanded) "Contraer" else "Expandir",
@@ -387,7 +416,9 @@ fun ExpandableInventoryCard(
                   .testTag("btn_entry_${item.productId}"),
                 shape = RoundedCornerShape(8.dp),
               ) {
-                Text("+ Entrada", style = MaterialTheme.typography.labelMedium)
+                Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("+ Entrada", style = MaterialTheme.typography.labelMedium, maxLines = 1)
               }
               Button(
                 onClick = onAdjustClosingClick,
@@ -396,7 +427,9 @@ fun ExpandableInventoryCard(
                   .testTag("btn_count_${item.productId}"),
                 shape = RoundedCornerShape(8.dp),
               ) {
-                Text("Conteo Final", style = MaterialTheme.typography.labelMedium)
+                Icon(Icons.Default.Inventory, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Conteo Final", style = MaterialTheme.typography.labelMedium, maxLines = 1)
               }
             }
 
@@ -408,7 +441,9 @@ fun ExpandableInventoryCard(
                 .testTag("btn_edit_sale_${item.productId}"),
               shape = RoundedCornerShape(8.dp),
             ) {
-              Text("Editar o Anular Venta", style = MaterialTheme.typography.labelMedium)
+              Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(4.dp))
+              Text("Editar o Anular Venta", style = MaterialTheme.typography.labelMedium, maxLines = 1)
             }
           }
         }

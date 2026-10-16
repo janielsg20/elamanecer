@@ -23,9 +23,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.FilterAlt
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Share
+import com.example.domain.icon.ProductIconView
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -227,7 +229,12 @@ fun ReportsScreen(
           FilterChip(
             selected = false,
             onClick = { viewModel.clearCalendarFilter() },
-            label = { Text("Ver Todas", style = MaterialTheme.typography.labelMedium) },
+            label = {
+              Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(14.dp))
+                Text("Ver Todas", style = MaterialTheme.typography.labelMedium)
+              }
+            },
             shape = RoundedCornerShape(8.dp),
           )
         }
@@ -433,13 +440,33 @@ fun ReportsScreen(
                   horizontalArrangement = Arrangement.SpaceBetween,
                   verticalAlignment = Alignment.CenterVertically,
                 ) {
-                  Text(
-                    text = item.productName,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                  Row(
                     modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                  )
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                  ) {
+                    ProductIconView(
+                      productName = item.productName,
+                      categoryName = item.categoryName,
+                      size = 40.dp,
+                      iconSize = 22.dp,
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                      Text(
+                        text = item.productName,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                      )
+                      Text(
+                        text = "${item.categoryName} • ${item.unitOfMeasure}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                      )
+                    }
+                  }
                   Spacer(modifier = Modifier.width(8.dp))
                   Text(
                     text = Product.formatMoney(item.saleAmountCents),

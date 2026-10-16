@@ -20,13 +20,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.ToggleOff
 import androidx.compose.material.icons.filled.ToggleOn
+import androidx.compose.material.icons.filled.Warning
+import com.example.domain.icon.ProductIconView
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -171,6 +179,7 @@ fun ProductsScreen(
         FilterChip(
           selected = uiState.selectedCategoryId == null,
           onClick = { viewModel.setCategoryFilter(null) },
+          leadingIcon = { Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(14.dp)) },
           label = { Text("Todos (${uiState.products.size})", style = MaterialTheme.typography.labelMedium) },
         )
         uiState.categories.forEach { cat ->
@@ -178,6 +187,7 @@ fun ProductsScreen(
           FilterChip(
             selected = uiState.selectedCategoryId == cat.id,
             onClick = { viewModel.setCategoryFilter(cat.id) },
+            leadingIcon = { Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(14.dp)) },
             label = { Text("${cat.name} ($count)", style = MaterialTheme.typography.labelMedium) },
           )
         }
@@ -212,21 +222,34 @@ fun ProductsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
               ) {
-                Column(modifier = Modifier.weight(1f)) {
-                  Text(
-                    text = product.name,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                Row(
+                  modifier = Modifier.weight(1f),
+                  verticalAlignment = Alignment.CenterVertically,
+                  horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                  ProductIconView(
+                    productName = product.name,
+                    categoryName = product.categoryName,
+                    size = 42.dp,
+                    iconSize = 24.dp,
                   )
-                  Text(
-                    text = "${product.categoryName} • ${product.unitOfMeasure}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                  )
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                      text = product.name,
+                      style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                      text = "${product.categoryName} • ${product.unitOfMeasure}",
+                      style = MaterialTheme.typography.bodySmall,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
+                  }
                 }
+                Spacer(modifier = Modifier.width(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                   IconButton(
                     onClick = { viewModel.toggleProductActive(product) },
@@ -308,6 +331,9 @@ fun ProductsScreen(
         isCreatingProduct = false
         editingProduct = null
       },
+      icon = {
+        Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+      },
       title = { Text(if (initialProd == null) "Nuevo Producto" else "Editar Producto", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) },
       text = {
         Column(
@@ -320,6 +346,7 @@ fun ProductsScreen(
             value = nameInput,
             onValueChange = { nameInput = it },
             label = { Text("Nombre del Producto") },
+            leadingIcon = { Icon(Icons.Default.Label, contentDescription = null, modifier = Modifier.size(18.dp)) },
             singleLine = true,
             modifier = Modifier
               .fillMaxWidth()
@@ -337,6 +364,7 @@ fun ProductsScreen(
               FilterChip(
                 selected = selectedCatId == cat.id,
                 onClick = { selectedCatId = cat.id },
+                leadingIcon = { Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(14.dp)) },
                 label = { Text(cat.name, style = MaterialTheme.typography.labelSmall) },
               )
             }
@@ -347,6 +375,7 @@ fun ProductsScreen(
               value = unitInput,
               onValueChange = { unitInput = it },
               label = { Text("Unidad (UM)") },
+              leadingIcon = { Icon(Icons.Default.Straighten, contentDescription = null, modifier = Modifier.size(16.dp)) },
               modifier = Modifier.weight(1f),
               singleLine = true,
             )
@@ -354,6 +383,7 @@ fun ProductsScreen(
               value = minStockInput,
               onValueChange = { minStockInput = it },
               label = { Text("Stock Mínimo") },
+              leadingIcon = { Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(16.dp)) },
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
               modifier = Modifier.weight(1f),
               singleLine = true,
@@ -365,6 +395,7 @@ fun ProductsScreen(
               value = salePriceInput,
               onValueChange = { salePriceInput = it },
               label = { Text("Precio Venta ($)") },
+              leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = null, modifier = Modifier.size(16.dp)) },
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
               modifier = Modifier
                 .weight(1f)
@@ -375,6 +406,7 @@ fun ProductsScreen(
               value = costPriceInput,
               onValueChange = { costPriceInput = it },
               label = { Text("Costo Unitario ($)") },
+              leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = null, modifier = Modifier.size(16.dp)) },
               keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
               modifier = Modifier
                 .weight(1f)
@@ -407,6 +439,8 @@ fun ProductsScreen(
           enabled = nameInput.isNotBlank(),
           modifier = Modifier.testTag("btn_save_product"),
         ) {
+          Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Guardar")
         }
       },
@@ -415,6 +449,8 @@ fun ProductsScreen(
           isCreatingProduct = false
           editingProduct = null
         }) {
+          Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Cancelar")
         }
       },
@@ -425,6 +461,9 @@ fun ProductsScreen(
   productToDelete?.let { prod ->
     AlertDialog(
       onDismissRequest = { productToDelete = null },
+      icon = {
+        Icon(Icons.Default.Delete, contentDescription = null, tint = DangerRed)
+      },
       title = { Text("Eliminar Producto", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) },
       text = {
         Text("¿Deseas eliminar '${prod.name}'? El producto será removido del catálogo y de las jornadas asociadas.")
@@ -438,11 +477,15 @@ fun ProductsScreen(
           colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
           modifier = Modifier.testTag("btn_confirm_delete_product"),
         ) {
+          Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Eliminar")
         }
       },
       dismissButton = {
         TextButton(onClick = { productToDelete = null }) {
+          Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Cancelar")
         }
       },
@@ -456,6 +499,9 @@ fun ProductsScreen(
 
     AlertDialog(
       onDismissRequest = { isManagingCategories = false },
+      icon = {
+        Icon(Icons.Default.Category, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+      },
       title = { Text("Gestionar Categorías", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) },
       text = {
         Column(
@@ -486,18 +532,25 @@ fun ProductsScreen(
                   horizontalArrangement = Arrangement.SpaceBetween,
                   verticalAlignment = Alignment.CenterVertically,
                 ) {
-                  Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                      text = cat.name,
-                      style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                      maxLines = 1,
-                      overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                      text = "$productCount productos",
-                      style = MaterialTheme.typography.labelSmall,
-                      color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                  Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  ) {
+                    Icon(Icons.Default.Category, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                      Text(
+                        text = cat.name,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                      )
+                      Text(
+                        text = "$productCount productos",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                      )
+                    }
                   }
                   IconButton(
                     onClick = { categoryToDelete = cat },
@@ -524,6 +577,7 @@ fun ProductsScreen(
             value = newCatName,
             onValueChange = { newCatName = it },
             label = { Text("Nombre de Categoría") },
+            leadingIcon = { Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(18.dp)) },
             singleLine = true,
             modifier = Modifier
               .fillMaxWidth()
@@ -551,11 +605,15 @@ fun ProductsScreen(
           enabled = newCatName.isNotBlank(),
           modifier = Modifier.testTag("btn_save_category"),
         ) {
+          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Agregar")
         }
       },
       dismissButton = {
         TextButton(onClick = { isManagingCategories = false }) {
+          Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Cerrar")
         }
       },
@@ -567,6 +625,9 @@ fun ProductsScreen(
     val count = uiState.products.count { it.categoryId == cat.id }
     AlertDialog(
       onDismissRequest = { categoryToDelete = null },
+      icon = {
+        Icon(Icons.Default.Delete, contentDescription = null, tint = DangerRed)
+      },
       title = { Text("Eliminar Categoría", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) },
       text = {
         Text("¿Deseas eliminar la categoría '${cat.name}'? Contiene $count productos asociados que también serán eliminados.")
@@ -580,11 +641,15 @@ fun ProductsScreen(
           colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
           modifier = Modifier.testTag("btn_confirm_delete_category"),
         ) {
+          Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Eliminar Categoría")
         }
       },
       dismissButton = {
         TextButton(onClick = { categoryToDelete = null }) {
+          Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Cancelar")
         }
       },

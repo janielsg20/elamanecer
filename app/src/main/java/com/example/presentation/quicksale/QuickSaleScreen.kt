@@ -20,11 +20,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ShoppingCartCheckout
+import com.example.domain.icon.ProductIconView
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
@@ -151,6 +157,8 @@ fun QuickSaleScreen(
                 onClick = { viewModel.clearCart() },
                 modifier = Modifier.testTag("btn_clear_cart"),
               ) {
+                Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text("Limpiar", style = MaterialTheme.typography.labelMedium)
               }
               Button(
@@ -158,7 +166,7 @@ fun QuickSaleScreen(
                 shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.testTag("btn_commit_sale"),
               ) {
-                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.ShoppingCartCheckout, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Cobrar", style = MaterialTheme.typography.labelMedium)
               }
@@ -207,12 +215,14 @@ fun QuickSaleScreen(
         FilterChip(
           selected = uiState.selectedCategoryId == null,
           onClick = { viewModel.setCategoryFilter(null) },
+          leadingIcon = { Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(14.dp)) },
           label = { Text("Todos", style = MaterialTheme.typography.labelMedium) },
         )
         uiState.categories.forEach { cat ->
           FilterChip(
             selected = uiState.selectedCategoryId == cat.id,
             onClick = { viewModel.setCategoryFilter(cat.id) },
+            leadingIcon = { Icon(Icons.Default.Category, contentDescription = null, modifier = Modifier.size(14.dp)) },
             label = { Text(cat.name, style = MaterialTheme.typography.labelMedium) },
           )
         }
@@ -245,29 +255,41 @@ fun QuickSaleScreen(
               horizontalArrangement = Arrangement.SpaceBetween,
               verticalAlignment = Alignment.CenterVertically,
             ) {
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = item.productName,
-                  style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis,
+              Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+              ) {
+                ProductIconView(
+                  productName = item.productName,
+                  categoryName = item.categoryName,
+                  size = 42.dp,
+                  iconSize = 24.dp,
                 )
-                Text(
-                  text = "${item.categoryName} • Stock: ${item.closingStock} ${item.unitOfMeasure}",
-                  style = MaterialTheme.typography.bodySmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  maxLines = 1,
-                  overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                  text = Product.formatMoney(item.salePriceCents),
-                  style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                  ),
-                  maxLines = 1,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = item.productName,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                  Text(
+                    text = "${item.categoryName} • Stock: ${item.closingStock} ${item.unitOfMeasure}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                  Spacer(modifier = Modifier.height(2.dp))
+                  Text(
+                    text = Product.formatMoney(item.salePriceCents),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                      fontWeight = FontWeight.Bold,
+                      color = MaterialTheme.colorScheme.primary,
+                    ),
+                    maxLines = 1,
+                  )
+                }
               }
 
               Spacer(modifier = Modifier.width(6.dp))
@@ -358,6 +380,9 @@ fun QuickSaleScreen(
 
     AlertDialog(
       onDismissRequest = { manualQuantityItem = null },
+      icon = {
+        Icon(Icons.Default.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+      },
       title = {
         Text(
           text = "Cantidad Manual: ${item.productName}",
@@ -427,11 +452,15 @@ fun QuickSaleScreen(
           enabled = !isExceeded && qtyInput.isNotBlank(),
           modifier = Modifier.testTag("btn_confirm_manual_qty"),
         ) {
+          Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Establecer")
         }
       },
       dismissButton = {
         TextButton(onClick = { manualQuantityItem = null }) {
+          Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Cancelar")
         }
       },

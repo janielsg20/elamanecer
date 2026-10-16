@@ -19,11 +19,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Today
+import com.example.domain.icon.ProductIconView
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -291,6 +300,14 @@ fun InventoryScreen(
 
     AlertDialog(
       onDismissRequest = { activeEntryItem = null },
+      icon = {
+        ProductIconView(
+          productName = item.productName,
+          categoryName = item.categoryName,
+          size = 46.dp,
+          iconSize = 26.dp,
+        )
+      },
       title = {
         Text(
           text = "Entrada: ${item.productName}",
@@ -341,11 +358,15 @@ fun InventoryScreen(
           enabled = additionalEntries > 0,
           modifier = Modifier.testTag("btn_confirm_entry"),
         ) {
+          Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Registrar")
         }
       },
       dismissButton = {
         TextButton(onClick = { activeEntryItem = null }) {
+          Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Cancelar")
         }
       },
@@ -369,6 +390,14 @@ fun InventoryScreen(
 
     AlertDialog(
       onDismissRequest = { activeCountItem = null },
+      icon = {
+        ProductIconView(
+          productName = item.productName,
+          categoryName = item.categoryName,
+          size = 46.dp,
+          iconSize = 26.dp,
+        )
+      },
       title = {
         Text(
           text = "Conteo: ${item.productName}",
@@ -449,11 +478,15 @@ fun InventoryScreen(
           enabled = !isExceeded && closingInput.isNotBlank(),
           modifier = Modifier.testTag("btn_confirm_count"),
         ) {
+          Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Guardar")
         }
       },
       dismissButton = {
         TextButton(onClick = { activeCountItem = null }) {
+          Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Cancelar")
         }
       },
@@ -500,11 +533,15 @@ fun InventoryScreen(
           colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
           modifier = Modifier.testTag("btn_confirm_close_day"),
         ) {
+          Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(6.dp))
           Text("Confirmar y Cerrar")
         }
       },
       dismissButton = {
         TextButton(onClick = { showCloseDayDialog = false }) {
+          Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Cancelar")
         }
       },
@@ -517,6 +554,9 @@ fun InventoryScreen(
     var newDateInput by remember { mutableStateOf(DateHelper.getTodayDateString()) }
     AlertDialog(
       onDismissRequest = { showNewSessionDialog = false },
+      icon = {
+        Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
+      },
       title = { Text("Abrir Nueva Jornada", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) },
       text = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -535,6 +575,8 @@ fun InventoryScreen(
               modifier = Modifier.weight(1f),
               shape = RoundedCornerShape(8.dp),
             ) {
+              Icon(Icons.Default.Today, contentDescription = null, modifier = Modifier.size(14.dp))
+              Spacer(modifier = Modifier.width(4.dp))
               Text("Hoy", style = MaterialTheme.typography.labelMedium)
             }
             FilledTonalButton(
@@ -542,6 +584,8 @@ fun InventoryScreen(
               modifier = Modifier.weight(1f),
               shape = RoundedCornerShape(8.dp),
             ) {
+              Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(14.dp))
+              Spacer(modifier = Modifier.width(4.dp))
               Text("Calendario", style = MaterialTheme.typography.labelMedium)
             }
           }
@@ -568,11 +612,15 @@ fun InventoryScreen(
           },
           modifier = Modifier.testTag("btn_confirm_new_session"),
         ) {
+          Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Abrir")
         }
       },
       dismissButton = {
         TextButton(onClick = { showNewSessionDialog = false }) {
+          Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Cancelar")
         }
       },

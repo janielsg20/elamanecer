@@ -20,6 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Lock
@@ -31,6 +34,7 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
+import com.example.domain.icon.ProductIconView
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -419,13 +423,25 @@ fun DashboardScreen(
                   horizontalArrangement = Arrangement.SpaceBetween,
                   verticalAlignment = Alignment.CenterVertically,
                 ) {
-                  Text(
-                    text = alert.product.name,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                  Row(
                     modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                  )
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  ) {
+                    ProductIconView(
+                      productName = alert.product.name,
+                      categoryName = alert.product.categoryName,
+                      size = 32.dp,
+                      iconSize = 18.dp,
+                    )
+                    Text(
+                      text = alert.product.name,
+                      style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                      modifier = Modifier.weight(1f),
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
+                  }
                   Spacer(modifier = Modifier.width(8.dp))
                   Surface(
                     shape = RoundedCornerShape(6.dp),
@@ -559,6 +575,13 @@ fun DashboardScreen(
                     )
                   }
                   Spacer(modifier = Modifier.width(8.dp))
+                  ProductIconView(
+                    productName = item.productName,
+                    categoryName = item.categoryName,
+                    size = 36.dp,
+                    iconSize = 20.dp,
+                  )
+                  Spacer(modifier = Modifier.width(8.dp))
                   Column(modifier = Modifier.weight(1f)) {
                     Text(
                       text = item.productName,
@@ -634,11 +657,15 @@ fun DashboardScreen(
           colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
           modifier = Modifier.testTag("btn_confirm_close_session"),
         ) {
+          Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(6.dp))
           Text("Confirmar Cierre")
         }
       },
       dismissButton = {
         TextButton(onClick = { showCloseConfirmDialog = false }) {
+          Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+          Spacer(modifier = Modifier.width(4.dp))
           Text("Cancelar")
         }
       },
