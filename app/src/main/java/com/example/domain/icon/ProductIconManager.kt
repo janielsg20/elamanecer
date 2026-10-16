@@ -73,12 +73,36 @@ object ProductIconManager {
    * Resuelve el identificador del icono de Material Design a partir del nombre del producto y categoría.
    */
   fun resolveIconName(productName: String, categoryName: String? = null): String {
-    val text = normalize("${productName.lowercase()} ${categoryName?.lowercase() ?: ""}")
+    val prodText = normalize(productName.lowercase())
 
+    val iconFromProduct = matchProductText(prodText)
+    if (iconFromProduct != null) {
+      return iconFromProduct
+    }
+
+    categoryName?.let { normalize(it.lowercase()) }?.let { cat ->
+      if (cat.containsAny("bebida", "liquido", "bar", "cerveza")) return "sports_bar"
+      if (cat.containsAny("alimento", "comida", "comestible", "cocina")) return "restaurant"
+      if (cat.containsAny("aseo", "limpieza", "higiene")) return "soap"
+      if (cat.containsAny("golosina", "dulce", "snack", "confiteria")) return "cookie"
+      if (cat.containsAny("pan", "reposteria")) return "bakery_dining"
+      if (cat.containsAny("cigarro", "tabaco")) return "smoking_rooms"
+      if (cat.containsAny("farmacia", "salud")) return "local_pharmacy"
+
+      val iconFromCategory = matchProductText(cat)
+      if (iconFromCategory != null) {
+        return iconFromCategory
+      }
+    }
+
+    return "inventory_2"
+  }
+
+  private fun matchProductText(text: String): String? {
     if (text.containsAny("cerveza", "cristal", "bucanero", "corona", "heineken", "pilsen", "lager", "ale", "birra")) return "sports_bar"
     if (text.containsAny("vino", "tinto", "blanco", "champagne", "sidra", "espumante")) return "wine_bar"
     if (text.containsAny("ron", "vodka", "whisky", "whiskey", "tequila", "licor", "aguardiente", "ginebra", "gin", "coctel", "mojito", "trago", "havana")) return "local_bar"
-    if (text.containsAny("refresco", "soda", "gaseosa", "coca", "pepsi", "sprite", "fanta", "jugo", "zumo", "malta", "bebida", "tuKola", "tukola")) return "local_drink"
+    if (text.containsAny("refresco", "soda", "gaseosa", "coca", "pepsi", "sprite", "fanta", "jugo", "zumo", "malta", "bebida", "tukola")) return "local_drink"
     if (text.containsAny("agua", "mineral", "hielo")) return "water_drop"
     if (text.containsAny("cafe", "coffee", "espresso", "capuchino", "te", "infusion")) return "local_cafe"
     if (text.containsAny("pan", "baguette", "tostada", "harina", "croissant", "panaderia")) return "bakery_dining"
@@ -96,18 +120,7 @@ object ProductIconManager {
     if (text.containsAny("jabon", "shampoo", "champu", "desodorante", "colonia", "perfume", "dental", "pasta dental", "cepillo", "aseo")) return "soap"
     if (text.containsAny("papel", "higienico", "servilleta", "toalla", "panuelo")) return "clean_hands"
     if (text.containsAny("medicina", "pastilla", "farmacia", "curita", "jarabe", "alcohol", "remedio", "aspirina", "salud")) return "local_pharmacy"
-
-    categoryName?.let { normalize(it.lowercase()) }?.let { cat ->
-      if (cat.containsAny("bebida", "liquido", "bar", "cerveza")) return "sports_bar"
-      if (cat.containsAny("alimento", "comida", "comestible", "cocina")) return "restaurant"
-      if (cat.containsAny("aseo", "limpieza", "higiene")) return "soap"
-      if (cat.containsAny("golosina", "dulce", "snack", "confiteria")) return "cookie"
-      if (cat.containsAny("pan", "reposteria")) return "bakery_dining"
-      if (cat.containsAny("cigarro", "tabaco")) return "smoking_rooms"
-      if (cat.containsAny("farmacia", "salud")) return "local_pharmacy"
-    }
-
-    return "inventory_2"
+    return null
   }
 
   /**
@@ -271,7 +284,13 @@ object ProductIconManager {
   }
 
   private fun String.containsAny(vararg keywords: String): Boolean {
-    return keywords.any { this.contains(it) }
+    return keywords.any { kw ->
+      if (kw.length <= 2) {
+        Regex("""\b${Regex.escape(kw)}\b""", RegexOption.IGNORE_CASE).containsMatchIn(this)
+      } else {
+        this.contains(kw)
+      }
+    }
   }
 }
 

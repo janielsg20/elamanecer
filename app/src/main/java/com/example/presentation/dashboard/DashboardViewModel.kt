@@ -8,6 +8,7 @@ import com.example.domain.model.DailySession
 import com.example.domain.model.DateHelper
 import com.example.domain.model.DaySummary
 import com.example.domain.model.Product
+import com.example.domain.model.Project
 import com.example.domain.model.SessionStatus
 import com.example.domain.repository.InventoryRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -28,6 +29,8 @@ data class LowStockAlert(
 
 data class DashboardUiState(
   val isLoading: Boolean = true,
+  val projects: List<Project> = emptyList(),
+  val currentProject: Project? = null,
   val activeSession: DailySession? = null,
   val summary: DaySummary? = null,
   val items: List<DailyInventoryItem> = emptyList(),
@@ -49,18 +52,38 @@ class DashboardViewModel(
   init {
     viewModelScope.launch {
       repository.seedInitialDataIfEmpty()
+      observeProjects()
       observeDashboardData()
+    }
+  }
+
+  private fun observeProjects() {
+    viewModelScope.launch {
+      combine(
+        repository.getAllProjects(),
+        repository.getSelectedProjectId()
+      ) { projects, selectedId ->
+        val current = projects.find { it.id == selectedId } ?: projects.firstOrNull()
+        Pair(projects, current)
+      }.collect { (projects, current) ->
+        _uiState.value = _uiState.value.copy(
+          projects = projects,
+          currentProject = current,
+        )
+      }
     }
   }
 
   private fun observeDashboardData() {
     viewModelScope.launch {
-      // Prioritize open session; if none is open, show the latest closed session
-      combine(
-        repository.getLatestOpenSession(),
-        repository.getLatestSession(),
-      ) { openSession, latestSession ->
-        openSession ?: latestSession
+      // Re-evalúa los datos cuando cambia la sesión o el proyecto
+      repository.getSelectedProjectId().flatMapLatest { projectId ->
+        combine(
+          repository.getLatestOpenSession(projectId),
+          repository.getLatestSession(projectId),
+        ) { openSession, latestSession ->
+          openSession ?: latestSession
+        }
       }.flatMapLatest { session ->
         if (session == null) {
           flowOf(Triple<DailySession?, DaySummary?, Pair<List<DailyInventoryItem>, List<Product>>>(null, null, Pair(emptyList(), emptyList())))
@@ -118,6 +141,87 @@ class DashboardViewModel(
     }
   }
 
+  fun selectProject(projectId: Long) {
+    viewModelScope.launch {
+      repository.setSelectedProjectId(projectId)
+      val project = _uiState.value.projects.find { it.id == projectId }
+      _uiState.value = _uiState.value.copy(
+        currentProject = project,
+        successMessage = "Local activo cambiado a: ${project?.name ?: "Local $projectId"}",
+      )
+    }
+  }
+
+  fun createProject(name: String, type: String, description: String, colorHex: String) {
+    viewModelScope.launch {
+      try {
+        if (name.isBlank()) {
+          _uiState.value = _uiState.value.copy(errorMessage = "El nombre del local no puede estar vacío")
+          return@launch
+        }
+        val newProj = Project(
+          name = name.trim(),
+          type = type,
+          description = description.trim(),
+          colorHex = colorHex,
+        )
+        val newId = repository.insertProject(newProj)
+        repository.setSelectedProjectId(newId)
+        _uiState.value = _uiState.value.copy(
+          successMessage = "Local \"$name\" creado exitosamente",
+          errorMessage = null,
+        )
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = e.message ?: "Error al crear local")
+      }
+    }
+  }
+
+  fun updateProject(id: Long, name: String, type: String, description: String, colorHex: String) {
+    viewModelScope.launch {
+      try {
+        if (name.isBlank()) {
+          _uiState.value = _uiState.value.copy(errorMessage = "El nombre del local no puede estar vacío")
+          return@launch
+        }
+        val existing = repository.getProjectById(id) ?: return@launch
+        val updated = existing.copy(
+          name = name.trim(),
+          type = type,
+          description = description.trim(),
+          colorHex = colorHex,
+        )
+        repository.updateProject(updated)
+        _uiState.value = _uiState.value.copy(
+          successMessage = "Local \"$name\" actualizado exitosamente",
+          errorMessage = null,
+        )
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = e.message ?: "Error al actualizar local")
+      }
+    }
+  }
+
+  fun deleteProject(projectId: Long) {
+    viewModelScope.launch {
+      try {
+        val totalProjects = _uiState.value.projects.size
+        if (totalProjects <= 1) {
+          _uiState.value = _uiState.value.copy(errorMessage = "No se puede eliminar el único local existente")
+          return@launch
+        }
+        val toDelete = _uiState.value.projects.find { it.id == projectId }
+        repository.deleteProject(projectId)
+        _uiState.value = _uiState.value.copy(
+          successMessage = "Local \"${toDelete?.name ?: ""}\" eliminado",
+          errorMessage = null,
+        )
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = e.message ?: "Error al eliminar local")
+      }
+    }
+  }
+
   fun openTodaySession() {
     val todayStr = DateHelper.getTodayDateString()
     val todayEpoch = DateHelper.getTodayEpochDay()
@@ -133,7 +237,8 @@ class DashboardViewModel(
   fun openSession(dateString: String, epochDay: Long) {
     viewModelScope.launch {
       try {
-        val existing = repository.getSessionByDate(dateString)
+        val currentProjId = _uiState.value.currentProject?.id ?: 1L
+        val existing = repository.getSessionByDate(dateString, currentProjId)
         if (existing != null) {
           if (existing.status == SessionStatus.CLOSED) {
             repository.reopenSession(existing.id)
@@ -148,7 +253,7 @@ class DashboardViewModel(
             )
           }
         } else {
-          val session = repository.getOrCreateSessionForDate(dateString, epochDay)
+          repository.getOrCreateSessionForDate(dateString, epochDay, currentProjId)
           _uiState.value = _uiState.value.copy(
             successMessage = "Jornada $dateString abierta exitosamente",
             errorMessage = null,

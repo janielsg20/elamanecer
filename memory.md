@@ -46,3 +46,8 @@ El sistema digitaliza el proceso:
 - [x] **Apertura y Cierre Dinámico en Dashboard:** Botones adaptativos en Dashboard para "Cerrar Jornada" (con diálogo informativo) o "Abrir Jornada (Hoy)" y "Elegir Fecha en Calendario" cuando no hay sesión abierta, más opción de reabrir.
 - [x] **Creación Flexible de Jornadas (Hoy / Calendario):** Soporte en Dashboard e Inventario para abrir jornadas hoy o seleccionando en calendario M3 (`AppDatePickerDialog`).
 - [x] **Filtro por Calendario en Historial y Reportes:** Selección de fecha en calendario para filtrar jornadas, con banner de filtro activo, chip rápido, botón para limpiar filtro y creación rápida en caso de no existir registros.
+- [x] **FASE 13 — Proyectos Independientes de Gestión y Sección de Almacenes:**
+  - **Proyectos de Gestión (Kiosko, Bar, Paladar, Otro):** CRUD completo para proyectos (crear, editar, eliminar, asignar color/tipo). Selector activo en Dashboard que conmuta métricas, ventas, inventario y jornadas reactivamente.
+  - **Sección de Almacenes Centrales:** Gestión de almacenes (Kioskos, Bar, Paladar, General). Control de stock en almacén, entradas de reabastecimiento y alertas de stock mínimo.
+  - **Despacho y Envío de Stock a Proyectos:** Módulo de transferencia con cálculo en tiempo real (*"Salida: 45 unidades de Refrescos para Kiosko, quedan X en almacén"*), sumando automáticamente la mercadería a las entradas de la sesión activa del proyecto destino y registrando el historial completo de envíos.
+

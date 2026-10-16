@@ -19,6 +19,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
+import com.example.domain.model.Project
+
 data class OverallPeriodSummary(
   val totalSalesCents: Long = 0L,
   val totalCostCents: Long = 0L,
@@ -31,6 +33,7 @@ data class OverallPeriodSummary(
 
 data class ReportsUiState(
   val isLoading: Boolean = true,
+  val currentProject: Project? = null,
   val allSessions: List<DailySession> = emptyList(),
   val filteredSessions: List<DailySession> = emptyList(),
   val calendarFilterDate: String? = null,
@@ -63,33 +66,38 @@ class ReportsViewModel(
 
   private fun observeReports() {
     viewModelScope.launch {
-      combine(
-        repository.getAllSessions(),
-        _calendarFilterDate
-      ) { sessions, filterDate ->
-        val filtered = if (filterDate.isNullOrBlank()) {
-          sessions
-        } else {
-          sessions.filter { it.dateString == filterDate }
-        }
+      repository.getSelectedProjectId().flatMapLatest { projectId ->
+        val project = repository.getProjectById(projectId)
+        combine(
+          repository.getAllSessions(projectId),
+          _calendarFilterDate,
+          repository.getAllProjects(),
+        ) { sessions, filterDate, allProjects ->
+          val curProj = allProjects.find { it.id == projectId } ?: project
+          val filtered = if (filterDate.isNullOrBlank()) {
+            sessions
+          } else {
+            sessions.filter { it.dateString == filterDate }
+          }
 
-        val currentSelected = _selectedSessionId.value
-        val nextSelected = if (filtered.any { it.id == currentSelected }) {
-          currentSelected
-        } else {
-          filtered.firstOrNull()?.id
-        }
+          val currentSelected = _selectedSessionId.value
+          val nextSelected = if (filtered.any { it.id == currentSelected }) {
+            currentSelected
+          } else {
+            filtered.firstOrNull()?.id
+          }
 
-        if (nextSelected != _selectedSessionId.value) {
-          _selectedSessionId.value = nextSelected
-        }
+          if (nextSelected != _selectedSessionId.value) {
+            _selectedSessionId.value = nextSelected
+          }
 
-        Triple(sessions, filtered, filterDate)
-      }.collect { (sessions, filtered, filterDate) ->
+          Triple(curProj, sessions, filtered)
+        }
+      }.collect { (project, sessions, filtered) ->
         _uiState.value = _uiState.value.copy(
+          currentProject = project,
           allSessions = sessions,
           filteredSessions = filtered,
-          calendarFilterDate = filterDate,
           selectedSessionId = _selectedSessionId.value,
           isLoading = false,
         )
@@ -157,8 +165,13 @@ class ReportsViewModel(
     val session = _uiState.value.allSessions.find { it.id == _uiState.value.selectedSessionId }
     val dateStr = session?.dateString ?: "Reporte"
 
+    val project = _uiState.value.currentProject
+    val localName = project?.name ?: "Local Principal"
+    val localType = project?.type ?: "GENERAL"
+
     val sb = StringBuilder()
     sb.appendLine("REPORTE DE VENTAS E INVENTARIO - $dateStr")
+    sb.appendLine("Local: $localName ($localType)")
     sb.appendLine("Estado: ${session?.status ?: ""}")
     if (summary != null) {
       sb.appendLine("Ventas Totales: ${Product.formatMoney(summary.totalSalesCents)}")

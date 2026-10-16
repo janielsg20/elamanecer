@@ -122,9 +122,12 @@ fun InventoryScreen(
               overflow = TextOverflow.Ellipsis,
             )
             Text(
-              text = selectedSession?.let { "Fecha: ${it.dateString}" } ?: "Sin jornada",
+              text = buildString {
+                append(uiState.currentProject?.name ?: "Local")
+                selectedSession?.let { append(" • Fecha: ${it.dateString}") } ?: append(" • Sin jornada")
+              },
               style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              color = MaterialTheme.colorScheme.primary,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )

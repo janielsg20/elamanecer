@@ -16,6 +16,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import com.example.domain.model.Project
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
+
 data class QuickSaleCartItem(
   val item: DailyInventoryItem,
   val quantity: Double,
@@ -26,6 +30,7 @@ data class QuickSaleCartItem(
 
 data class QuickSaleUiState(
   val isLoading: Boolean = true,
+  val currentProject: Project? = null,
   val activeSession: DailySession? = null,
   val categories: List<Category> = emptyList(),
   val selectedCategoryId: Long? = null,
@@ -39,6 +44,7 @@ data class QuickSaleUiState(
   val errorMessage: String? = null,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class QuickSaleViewModel(
   private val repository: InventoryRepository,
 ) : ViewModel() {
@@ -55,28 +61,44 @@ class QuickSaleViewModel(
 
   private fun ensureOpenSessionAndObserve() {
     viewModelScope.launch {
-      repository.getLatestOpenSession().collect { openSession ->
+      repository.getSelectedProjectId().flatMapLatest { projectId ->
+        val project = repository.getProjectById(projectId)
+        combine(
+          repository.getLatestOpenSession(projectId),
+          repository.getAllProjects(),
+        ) { openSession, allProjects ->
+          val curProj = allProjects.find { it.id == projectId } ?: project
+          Pair(curProj, openSession)
+        }
+      }.flatMapLatest { (project, openSession) ->
         val session = openSession ?: run {
           val sdf = SimpleDateFormat("dd-MM-yyyy", Locale.getDefault())
           val todayStr = sdf.format(Date())
           val epochDay = System.currentTimeMillis() / 86400000L
-          repository.getOrCreateSessionForDate(todayStr, epochDay)
+          val projId = project?.id ?: 1L
+          repository.getOrCreateSessionForDate(todayStr, epochDay, projId)
         }
 
         combine(
           repository.getSessionInventoryItems(session.id),
           repository.getActiveCategories()
         ) { items, categories ->
-          Pair(items, categories)
-        }.collect { (items, categories) ->
-          _uiState.value = _uiState.value.copy(
-            isLoading = false,
-            activeSession = session,
-            categories = categories,
-            availableItems = items,
-          )
-          applyFilters()
+          Triple(project, session, Pair(items, categories))
         }
+      }.collect { (project, session, itemsAndCategories) ->
+        val (items, categories) = itemsAndCategories
+        val isNewSession = _uiState.value.activeSession?.id != session.id
+        _uiState.value = _uiState.value.copy(
+          isLoading = false,
+          currentProject = project,
+          activeSession = session,
+          categories = categories,
+          availableItems = items,
+          cart = if (isNewSession) emptyMap() else _uiState.value.cart,
+          totalCartCents = if (isNewSession) 0L else _uiState.value.totalCartCents,
+          totalCartUnits = if (isNewSession) 0.0 else _uiState.value.totalCartUnits,
+        )
+        applyFilters()
       }
     }
   }

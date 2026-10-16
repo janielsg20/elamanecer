@@ -44,6 +44,8 @@ object AppViewModelProvider {
           ProductsViewModel(repository) as T
         modelClass.isAssignableFrom(ReportsViewModel::class.java) ->
           ReportsViewModel(repository) as T
+        modelClass.isAssignableFrom(com.example.presentation.warehouse.WarehouseViewModel::class.java) ->
+          com.example.presentation.warehouse.WarehouseViewModel(repository) as T
         else -> throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
       }
     }

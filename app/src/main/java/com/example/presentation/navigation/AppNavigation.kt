@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Store
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -36,9 +37,12 @@ import com.example.presentation.products.ProductsScreen
 import com.example.presentation.products.ProductsViewModel
 import com.example.presentation.quicksale.QuickSaleScreen
 import com.example.presentation.quicksale.QuickSaleViewModel
+import com.example.presentation.warehouse.WarehouseScreen
+import com.example.presentation.warehouse.WarehouseViewModel
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector, val tag: String) {
   object Dashboard : Screen("dashboard", "Inicio", Icons.Default.Dashboard, "nav_dashboard")
+  object Warehouse : Screen("warehouse", "Almacén", Icons.Default.Store, "nav_warehouse")
   object QuickSale : Screen("sales", "Ventas", Icons.Default.ShoppingCart, "nav_sales")
   object Inventory : Screen("inventory", "Inventario", Icons.Default.Inventory, "nav_inventory")
   object Products : Screen("products", "Productos", Icons.Default.Category, "nav_products")
@@ -53,6 +57,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
 
   val items = listOf(
     Screen.Dashboard,
+    Screen.Warehouse,
     Screen.QuickSale,
     Screen.Inventory,
     Screen.Products,
@@ -111,7 +116,19 @@ fun AppNavigation(modifier: Modifier = Modifier) {
               restoreState = true
             }
           },
+          onNavigateToWarehouse = {
+            navController.navigate(Screen.Warehouse.route) {
+              popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+              launchSingleTop = true
+              restoreState = true
+            }
+          },
         )
+      }
+
+      composable(Screen.Warehouse.route) {
+        val warehouseViewModel: WarehouseViewModel = viewModel(factory = AppViewModelProvider.Factory)
+        WarehouseScreen(viewModel = warehouseViewModel)
       }
 
       composable(Screen.QuickSale.route) {

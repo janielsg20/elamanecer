@@ -106,9 +106,12 @@ fun QuickSaleScreen(
               overflow = TextOverflow.Ellipsis,
             )
             Text(
-              text = uiState.activeSession?.let { "Jornada: ${it.dateString}" } ?: "Iniciando jornada...",
+              text = buildString {
+                append(uiState.currentProject?.name ?: "Local")
+                uiState.activeSession?.let { append(" • Jornada: ${it.dateString}") }
+              },
               style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              color = MaterialTheme.colorScheme.primary,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )

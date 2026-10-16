@@ -100,12 +100,21 @@ fun ReportsScreen(
     topBar = {
       TopAppBar(
         title = {
-          Text(
-            text = "Historial y Reportes",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
+          Column {
+            Text(
+              text = "Historial y Reportes",
+              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+              text = "${uiState.currentProject?.name ?: "Local"} • Jornadas: ${uiState.filteredSessions.size}",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.primary,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
         },
         actions = {
           IconButton(

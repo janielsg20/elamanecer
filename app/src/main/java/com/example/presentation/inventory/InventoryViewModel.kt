@@ -20,8 +20,11 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import com.example.domain.model.Project
+
 data class InventoryUiState(
   val isLoading: Boolean = true,
+  val currentProject: Project? = null,
   val allSessions: List<DailySession> = emptyList(),
   val selectedSession: DailySession? = null,
   val categories: List<Category> = emptyList(),
@@ -55,24 +58,32 @@ class InventoryViewModel(
 
   private fun loadInitialData() {
     viewModelScope.launch {
-      combine(
-        repository.getAllSessions(),
-        repository.getActiveCategories()
-      ) { sessions, categories ->
-        val currentSelected = _selectedSessionId.value
-        val targetSession = if (currentSelected != null) {
-          sessions.find { it.id == currentSelected } ?: sessions.firstOrNull()
-        } else {
-          sessions.find { it.status == SessionStatus.OPEN } ?: sessions.firstOrNull()
-        }
+      repository.getSelectedProjectId().flatMapLatest { projectId ->
+        val project = repository.getProjectById(projectId)
+        combine(
+          repository.getAllSessions(projectId),
+          repository.getActiveCategories(),
+          repository.getAllProjects(),
+        ) { sessions, categories, allProjects ->
+          val curProj = allProjects.find { it.id == projectId } ?: project
+          val currentSelected = _selectedSessionId.value
+          val targetSession = if (currentSelected != null && sessions.any { it.id == currentSelected }) {
+            sessions.find { it.id == currentSelected }
+          } else {
+            sessions.find { it.status == SessionStatus.OPEN } ?: sessions.firstOrNull()
+          }
 
-        if (targetSession != null && targetSession.id != _selectedSessionId.value) {
-          _selectedSessionId.value = targetSession.id
-        }
+          if (targetSession != null && targetSession.id != _selectedSessionId.value) {
+            _selectedSessionId.value = targetSession.id
+          } else if (targetSession == null) {
+            _selectedSessionId.value = null
+          }
 
-        Pair(sessions, categories)
-      }.collect { (sessions, categories) ->
+          Triple(curProj, sessions, categories)
+        }
+      }.collect { (project, sessions, categories) ->
         _uiState.value = _uiState.value.copy(
+          currentProject = project,
           allSessions = sessions,
           categories = categories,
         )
@@ -271,10 +282,11 @@ class InventoryViewModel(
   fun createNewSession(dateString: String, epochDay: Long) {
     viewModelScope.launch {
       try {
-        val newSession = repository.getOrCreateSessionForDate(dateString, epochDay)
+        val projId = _uiState.value.currentProject?.id ?: 1L
+        val newSession = repository.getOrCreateSessionForDate(dateString, epochDay, projId)
         _selectedSessionId.value = newSession.id
         _uiState.value = _uiState.value.copy(
-          successMessage = "Jornada para $dateString lista",
+          successMessage = "Jornada para $dateString lista en ${_uiState.value.currentProject?.name ?: "Local"}",
           errorMessage = null,
         )
       } catch (e: Exception) {
