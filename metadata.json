@@ -1,0 +1,6 @@
+{
+  "name": "Control de Ventas",
+  "description": "Sistema profesional de inventario, ventas diarias, utilidades y cierres",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
