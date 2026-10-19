@@ -41,18 +41,25 @@ data class WarehouseStockItem(
   val updatedAt: Long = System.currentTimeMillis(),
 ) {
   val costFormatted: String
-    get() = formatMoney((costPrice * 100).toLong())
+    get() = formatMoneyDouble(if (costPrice > 0.0) costPrice else costPriceCents / 100.0)
 
   val totalAmountFormatted: String
-    get() = formatMoney((totalAmount * 100).toLong())
+    get() = formatMoneyDouble(if (totalAmount > 0.0) totalAmount else (availableStock * (if (costPrice > 0.0) costPrice else costPriceCents / 100.0)))
 
   companion object {
+    fun formatMoneyDouble(amount: Double): String {
+      val isNegative = amount < 0
+      val absAmount = kotlin.math.abs(amount)
+      val formatted = "$${String.format(java.util.Locale.US, "%,.2f", absAmount)}"
+      return if (isNegative) "-$formatted" else formatted
+    }
+
     fun formatMoney(cents: Long): String {
       val isNegative = cents < 0
       val absCents = kotlin.math.abs(cents)
       val dollars = absCents / 100
       val remainder = absCents % 100
-      val formatted = "$${String.format("%,d.%02d", dollars, remainder)}"
+      val formatted = "$${String.format(java.util.Locale.US, "%,d.%02d", dollars, remainder)}"
       return if (isNegative) "-$formatted" else formatted
     }
   }

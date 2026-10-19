@@ -23,15 +23,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddBusiness
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Store
+import androidx.compose.material.icons.filled.TrendingDown
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -60,6 +66,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -99,8 +106,14 @@ fun WarehouseScreen(
   var showCreateWarehouseDialog by remember { mutableStateOf(false) }
   var warehouseToEdit by remember { mutableStateOf<Warehouse?>(null) }
   var warehouseToDelete by remember { mutableStateOf<Warehouse?>(null) }
-  var stockItemToAdd by remember { mutableStateOf<WarehouseStockItem?>(null) }
-  var stockItemToAdjust by remember { mutableStateOf<WarehouseStockItem?>(null) }
+
+  // Gestor de stock dialogs
+  var showStockItemDialog by remember { mutableStateOf(false) }
+  var stockItemToEdit by remember { mutableStateOf<WarehouseStockItem?>(null) }
+  var stockItemForEntry by remember { mutableStateOf<WarehouseStockItem?>(null) }
+  var stockItemForExit by remember { mutableStateOf<WarehouseStockItem?>(null) }
+  var stockItemToDelete by remember { mutableStateOf<WarehouseStockItem?>(null) }
+  var preselectedProductIdForDispatch by remember { mutableStateOf<Long?>(null) }
 
   LaunchedEffect(uiState.successMessage) {
     uiState.successMessage?.let {
@@ -122,14 +135,14 @@ fun WarehouseScreen(
         title = {
           Column {
             Text(
-              text = "Gestión de Almacenes",
+              text = "Gestor de Inventario de Almacén",
               style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )
             Text(
               text = uiState.selectedWarehouse?.let { "${it.name} (${it.targetType})" }
-                ?: "Control y Despachos Centrales",
+                ?: "Control de Existencias e Importes",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
               maxLines = 1,
@@ -155,28 +168,14 @@ fun WarehouseScreen(
       if (selectedTab == 0 && uiState.selectedWarehouse != null) {
         FloatingActionButton(
           onClick = {
-            val firstProd = uiState.products.firstOrNull()
-            if (firstProd != null) {
-              val existing = uiState.stockItems.find { it.productId == firstProd.id }
-              if (existing != null) {
-                stockItemToAdd = existing
-              } else {
-                stockItemToAdd = WarehouseStockItem(
-                  warehouseId = uiState.selectedWarehouse!!.id,
-                  productId = firstProd.id,
-                  productName = firstProd.name,
-                  categoryName = firstProd.categoryName,
-                  unitOfMeasure = firstProd.unitOfMeasure,
-                  currentStock = 0.0,
-                )
-              }
-            }
+            stockItemToEdit = null
+            showStockItemDialog = true
           },
           containerColor = MaterialTheme.colorScheme.primary,
           contentColor = MaterialTheme.colorScheme.onPrimary,
-          modifier = Modifier.testTag("warehouse_fab_add_stock"),
+          modifier = Modifier.testTag("warehouse_fab_add_product"),
         ) {
-          Icon(Icons.Default.Add, contentDescription = "Añadir Stock al Almacén")
+          Icon(Icons.Default.Add, contentDescription = "Nuevo Producto en Almacén")
         }
       }
     },
@@ -229,7 +228,7 @@ fun WarehouseScreen(
         Tab(
           selected = selectedTab == 0,
           onClick = { selectedTab = 0 },
-          text = { Text("Stock en Almacén") },
+          text = { Text("Inventario de Almacén") },
           icon = { Icon(Icons.Default.Inventory2, contentDescription = null, modifier = Modifier.size(18.dp)) },
           modifier = Modifier.testTag("tab_warehouse_stock"),
         )
@@ -258,9 +257,21 @@ fun WarehouseScreen(
           onSearchChange = viewModel::setSearchQuery,
           onEditWarehouse = { warehouseToEdit = it },
           onDeleteWarehouse = { warehouseToDelete = it },
-          onAddStock = { stockItemToAdd = it },
-          onAdjustStock = { stockItemToAdjust = it },
-          onGoToDispatch = { selectedTab = 1 },
+          onCreateProduct = {
+            stockItemToEdit = null
+            showStockItemDialog = true
+          },
+          onEditProduct = {
+            stockItemToEdit = it
+            showStockItemDialog = true
+          },
+          onAddEntry = { stockItemForEntry = it },
+          onAddExit = { stockItemForExit = it },
+          onDeleteStockItem = { stockItemToDelete = it },
+          onGoToDispatch = { productId ->
+            preselectedProductIdForDispatch = productId
+            selectedTab = 1
+          },
         )
 
         1 -> WarehouseDispatchTab(
@@ -268,6 +279,7 @@ fun WarehouseScreen(
           selectedWarehouse = uiState.selectedWarehouse,
           projects = uiState.projects,
           stockItems = uiState.stockItems,
+          initialProductId = preselectedProductIdForDispatch,
           onSelectWarehouse = viewModel::selectWarehouse,
           onDispatch = { wId, projId, prodId, qty, notes ->
             viewModel.dispatchStock(wId, projId, prodId, qty, notes)
@@ -328,34 +340,87 @@ fun WarehouseScreen(
     )
   }
 
-  stockItemToAdd?.let { item ->
-    AddStockDialog(
-      item = item,
-      products = uiState.products,
-      onDismiss = { stockItemToAdd = null },
-      onConfirm = { prodId, qty, minAlert ->
-        val wId = uiState.selectedWarehouse?.id ?: 1L
-        viewModel.addStock(wId, prodId, qty, minAlert)
-        stockItemToAdd = null
+  // Diálogo para Crear / Editar Producto en Almacén (con los 8 campos)
+  if (showStockItemDialog) {
+    val currentWarehouseId = uiState.selectedWarehouse?.id ?: 1L
+    WarehouseStockItemDialog(
+      item = stockItemToEdit,
+      catalogProducts = uiState.products,
+      onDismiss = {
+        showStockItemDialog = false
+        stockItemToEdit = null
+      },
+      onConfirm = { prodId, name, unit, inicio, entrada, salida, costo ->
+        viewModel.saveWarehouseStockItem(
+          warehouseId = currentWarehouseId,
+          productId = prodId,
+          productName = name,
+          unitOfMeasure = unit,
+          initialStock = inicio,
+          entries = entrada,
+          exits = salida,
+          costPrice = costo,
+        )
+        showStockItemDialog = false
+        stockItemToEdit = null
       },
     )
   }
 
-  stockItemToAdjust?.let { item ->
-    AdjustStockDialog(
+  // Diálogo para Entrada Rápida (+ Entrada)
+  stockItemForEntry?.let { item ->
+    QuickStockEntryDialog(
       item = item,
-      onDismiss = { stockItemToAdjust = null },
-      onConfirm = { newStock, minAlert ->
-        val wId = uiState.selectedWarehouse?.id ?: 1L
-        viewModel.updateStock(wId, item.productId, newStock, minAlert)
-        stockItemToAdjust = null
+      onDismiss = { stockItemForEntry = null },
+      onConfirm = { qty ->
+        viewModel.addStockEntry(item.warehouseId, item.productId, qty)
+        stockItemForEntry = null
+      },
+    )
+  }
+
+  // Diálogo para Salida Rápida (- Salida)
+  stockItemForExit?.let { item ->
+    QuickStockExitDialog(
+      item = item,
+      onDismiss = { stockItemForExit = null },
+      onConfirm = { qty ->
+        viewModel.addStockExit(item.warehouseId, item.productId, qty)
+        stockItemForExit = null
+      },
+    )
+  }
+
+  // Diálogo para Eliminar Producto del Almacén
+  stockItemToDelete?.let { item ->
+    AlertDialog(
+      onDismissRequest = { stockItemToDelete = null },
+      title = { Text("Eliminar Producto de Almacén") },
+      text = {
+        Text("¿Deseas quitar \"${item.productName}\" de este almacén? El producto conservará su historial previo si existiese.")
+      },
+      confirmButton = {
+        Button(
+          onClick = {
+            viewModel.deleteWarehouseStockItem(item.warehouseId, item.productId)
+            stockItemToDelete = null
+          },
+          colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
+        ) {
+          Text("Eliminar")
+        }
+      },
+      dismissButton = {
+        TextButton(onClick = { stockItemToDelete = null }) {
+          Text("Cancelar")
+        }
       },
     )
   }
 }
 
 // -------------------------------------------------------------
-// TAB 1: Stock en Almacén
+// TAB 1: Stock en Almacén (Gestor de Inventario con 8 campos)
 // -------------------------------------------------------------
 @Composable
 private fun WarehouseStockTab(
@@ -365,9 +430,12 @@ private fun WarehouseStockTab(
   onSearchChange: (String) -> Unit,
   onEditWarehouse: (Warehouse) -> Unit,
   onDeleteWarehouse: (Warehouse) -> Unit,
-  onAddStock: (WarehouseStockItem) -> Unit,
-  onAdjustStock: (WarehouseStockItem) -> Unit,
-  onGoToDispatch: () -> Unit,
+  onCreateProduct: () -> Unit,
+  onEditProduct: (WarehouseStockItem) -> Unit,
+  onAddEntry: (WarehouseStockItem) -> Unit,
+  onAddExit: (WarehouseStockItem) -> Unit,
+  onDeleteStockItem: (WarehouseStockItem) -> Unit,
+  onGoToDispatch: (productId: Long?) -> Unit,
 ) {
   if (warehouse == null) {
     Box(
@@ -384,6 +452,17 @@ private fun WarehouseStockTab(
     }
     return
   }
+
+  // Cálculos globales para el almacén
+  val totalImporte = stockItems.sumOf { item ->
+    val available = item.initialStock + item.entries - item.exits
+    val cost = if (item.costPrice > 0.0) item.costPrice else (item.costPriceCents / 100.0)
+    available * cost
+  }
+  val totalDisponibles = stockItems.sumOf { it.initialStock + it.entries - it.exits }
+  val totalEntradas = stockItems.sumOf { it.entries }
+  val totalSalidas = stockItems.sumOf { it.exits }
+  val totalInicio = stockItems.sumOf { it.initialStock }
 
   LazyColumn(
     contentPadding = PaddingValues(16.dp),
@@ -468,17 +547,14 @@ private fun WarehouseStockTab(
 
           Spacer(modifier = Modifier.height(12.dp))
 
-          // Métricas del almacén
-          val totalStockUnits = stockItems.sumOf { it.currentStock }
-          val lowStockCount = stockItems.count { it.currentStock <= it.minAlertStock }
-
+          // Métricas de cabecera rápida
           Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
           ) {
             StockSummaryChip(
-              title = "Total Unidades",
-              value = String.format("%,.0f", totalStockUnits),
+              title = "Disponible",
+              value = String.format("%,.0f", totalDisponibles),
               modifier = Modifier.weight(1f),
             )
             StockSummaryChip(
@@ -487,26 +563,42 @@ private fun WarehouseStockTab(
               modifier = Modifier.weight(1f),
             )
             StockSummaryChip(
-              title = "Stock Bajo",
-              value = lowStockCount.toString(),
-              color = if (lowStockCount > 0) WarningOrange else SuccessGreen,
-              modifier = Modifier.weight(1f),
+              title = "Total Importe",
+              value = WarehouseStockItem.formatMoneyDouble(totalImporte),
+              color = SuccessGreen,
+              modifier = Modifier.weight(1.3f),
             )
           }
 
           Spacer(modifier = Modifier.height(12.dp))
 
-          // Botón directo a Despachar
-          Button(
-            onClick = onGoToDispatch,
-            modifier = Modifier
-              .fillMaxWidth()
-              .testTag("warehouse_btn_quick_dispatch"),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+          // Acciones principales del almacén
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
           ) {
-            Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Despachar Productos a Proyecto")
+            Button(
+              onClick = onCreateProduct,
+              modifier = Modifier
+                .weight(1f)
+                .testTag("btn_add_warehouse_product"),
+              colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+            ) {
+              Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Nuevo Producto", style = MaterialTheme.typography.labelMedium)
+            }
+
+            OutlinedButton(
+              onClick = { onGoToDispatch(null) },
+              modifier = Modifier
+                .weight(1f)
+                .testTag("warehouse_btn_quick_dispatch"),
+            ) {
+              Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Despachar a Local", style = MaterialTheme.typography.labelMedium)
+            }
           }
         }
       }
@@ -517,7 +609,7 @@ private fun WarehouseStockTab(
       OutlinedTextField(
         value = searchQuery,
         onValueChange = onSearchChange,
-        placeholder = { Text("Buscar producto en este almacén...") },
+        placeholder = { Text("Buscar por producto o categoría...") },
         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
         shape = RoundedCornerShape(12.dp),
         singleLine = true,
@@ -555,6 +647,12 @@ private fun WarehouseStockTab(
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(onClick = onCreateProduct) {
+              Icon(Icons.Default.Add, contentDescription = null)
+              Spacer(modifier = Modifier.width(8.dp))
+              Text("Agregar Primer Producto")
+            }
           }
         }
       }
@@ -562,8 +660,25 @@ private fun WarehouseStockTab(
       items(stockItems, key = { it.id }) { item ->
         WarehouseStockItemCard(
           item = item,
-          onAddStock = { onAddStock(item) },
-          onAdjustStock = { onAdjustStock(item) },
+          onEdit = { onEditProduct(item) },
+          onAddEntry = { onAddEntry(item) },
+          onAddExit = { onAddExit(item) },
+          onDelete = { onDeleteStockItem(item) },
+          onDispatch = { onGoToDispatch(item.productId) },
+        )
+      }
+
+      // ---------------------------------------------------------
+      // TOTAL DE IMPORTE AL FINAL (REQUISITO EXPLÍCITO)
+      // ---------------------------------------------------------
+      item {
+        WarehouseTotalSummaryCard(
+          totalImporte = totalImporte,
+          totalInicio = totalInicio,
+          totalEntradas = totalEntradas,
+          totalSalidas = totalSalidas,
+          totalDisponibles = totalDisponibles,
+          itemCount = stockItems.size,
         )
       }
     }
@@ -590,108 +705,418 @@ private fun StockSummaryChip(
         text = title,
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
       )
       Text(
         text = value,
         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
         color = color,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
       )
     }
   }
 }
 
+// -------------------------------------------------------------
+// TARJETA DE CADA PRODUCTO EN ALMACÉN (CON LOS 8 CAMPOS)
+// - Producto (texto)
+// - Unidad (texto)
+// - Inicio (número)
+// - entrada (número)
+// - salida (número)
+// - disponible (número = inicio + entrada - salida)
+// - costo (número)
+// - importe (número = disponible * costo)
+// -------------------------------------------------------------
 @Composable
 private fun WarehouseStockItemCard(
   item: WarehouseStockItem,
-  onAddStock: () -> Unit,
-  onAdjustStock: () -> Unit,
+  onEdit: () -> Unit,
+  onAddEntry: () -> Unit,
+  onAddExit: () -> Unit,
+  onDelete: () -> Unit,
+  onDispatch: () -> Unit,
 ) {
-  val isLow = item.currentStock <= item.minAlertStock
-  val isOut = item.currentStock <= 0.0
+  val disponible = item.initialStock + item.entries - item.exits
+  val costo = if (item.costPrice > 0.0) item.costPrice else (item.costPriceCents / 100.0)
+  val importe = disponible * costo
+  val isLow = disponible <= item.minAlertStock
+  val isOut = disponible <= 0.0
 
   Card(
     modifier = Modifier
       .fillMaxWidth()
       .testTag("warehouse_stock_item_${item.productId}"),
     colors = CardDefaults.cardColors(
-      containerColor = if (isOut) DangerRed.copy(alpha = 0.08f)
-      else if (isLow) WarningOrange.copy(alpha = 0.08f)
+      containerColor = if (isOut) DangerRed.copy(alpha = 0.05f)
+      else if (isLow) WarningOrange.copy(alpha = 0.05f)
       else MaterialTheme.colorScheme.surface,
     ),
     shape = RoundedCornerShape(12.dp),
   ) {
-    Row(
+    Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(12.dp),
-      verticalAlignment = Alignment.CenterVertically,
+        .padding(14.dp),
     ) {
-      ProductIconView(
-        productName = item.productName,
-        categoryName = item.categoryName,
-        size = 44.dp,
-        iconSize = 24.dp,
-      )
-
-      Spacer(modifier = Modifier.width(12.dp))
-
-      Column(modifier = Modifier.weight(1f)) {
-        Text(
-          text = item.productName,
-          style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
+      // 1. Fila de Encabezado: Icono + Producto (texto) + Unidad (texto) + Acciones
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        ProductIconView(
+          productName = item.productName,
+          categoryName = item.categoryName,
+          size = 40.dp,
+          iconSize = 22.dp,
         )
-        Row(verticalAlignment = Alignment.CenterVertically) {
+
+        Spacer(modifier = Modifier.width(10.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+          // Campo: Producto
           Text(
-            text = item.categoryName,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            text = item.productName,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
           )
-          Text(
-            text = " • Min: ${item.minAlertStock.toInt()} ${item.unitOfMeasure}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
+
+          // Campo: Unidad
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            Surface(
+              shape = RoundedCornerShape(4.dp),
+              color = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+              Text(
+                text = "Unidad: ${item.unitOfMeasure}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+              )
+            }
+            if (item.categoryName.isNotBlank()) {
+              Text(
+                text = "• ${item.categoryName}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+          }
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Stock disponible destacado
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Text(
-            text = "Stock disponible: ",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-          )
-          Text(
-            text = "${String.format("%,.0f", item.currentStock)} ${item.unitOfMeasure}",
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = if (isOut) DangerRed else if (isLow) WarningOrange else SuccessGreen,
-          )
+        // Acciones: Editar y Eliminar
+        Row {
+          IconButton(onClick = onEdit) {
+            Icon(Icons.Default.Edit, contentDescription = "Editar Producto", tint = MaterialTheme.colorScheme.primary)
+          }
+          IconButton(onClick = onDelete) {
+            Icon(Icons.Default.Delete, contentDescription = "Eliminar Producto", tint = DangerRed)
+          }
         }
       }
 
-      // Botones de acción rápida
-      Column(horizontalAlignment = Alignment.End) {
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // 2. Cuadrícula de Campos de Cantidad: Inicio | Entrada | Salida | Disponible
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+      ) {
+        // Campo: Inicio
+        MetricColumnBox(
+          label = "Inicio",
+          value = String.format("%,.0f", item.initialStock),
+          unit = item.unitOfMeasure,
+          modifier = Modifier.weight(1f),
+        )
+
+        // Campo: Entrada
+        MetricColumnBox(
+          label = "Entrada",
+          value = "+${String.format("%,.0f", item.entries)}",
+          unit = item.unitOfMeasure,
+          textColor = SuccessGreen,
+          modifier = Modifier.weight(1f),
+        )
+
+        // Campo: Salida
+        MetricColumnBox(
+          label = "Salida",
+          value = "-${String.format("%,.0f", item.exits)}",
+          unit = item.unitOfMeasure,
+          textColor = if (item.exits > 0) DangerRed else MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.weight(1f),
+        )
+
+        // Campo: Disponible (Fórmula: inicio + entrada - salida)
+        MetricColumnBox(
+          label = "Disponible",
+          value = String.format("%,.0f", disponible),
+          unit = item.unitOfMeasure,
+          textColor = if (isOut) DangerRed else if (isLow) WarningOrange else SuccessGreen,
+          isHighlighted = true,
+          modifier = Modifier.weight(1.2f),
+        )
+      }
+
+      Spacer(modifier = Modifier.height(10.dp))
+
+      // 3. Fila de Campos Financieros: Costo | Importe (disponible * costo)
+      Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Row(
+          modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          // Campo: Costo
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+              text = "Costo: ",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+              text = WarehouseStockItem.formatMoneyDouble(costo),
+              style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+              color = MaterialTheme.colorScheme.onSurface,
+            )
+          }
+
+          // Campo: Importe (disponible * costo)
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+              text = "Importe: ",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+              text = WarehouseStockItem.formatMoneyDouble(importe),
+              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+              color = MaterialTheme.colorScheme.primary,
+            )
+          }
+        }
+      }
+
+      Spacer(modifier = Modifier.height(10.dp))
+
+      // 4. Botones Operativos Rápidos
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+      ) {
         OutlinedButton(
-          onClick = onAddStock,
+          onClick = onAddEntry,
           contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-          modifier = Modifier.height(32.dp),
+          modifier = Modifier.weight(1f).height(32.dp),
         ) {
           Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
           Spacer(modifier = Modifier.width(4.dp))
           Text("+ Entrada", style = MaterialTheme.typography.labelSmall)
         }
 
-        Spacer(modifier = Modifier.height(4.dp))
-
-        TextButton(
-          onClick = onAdjustStock,
-          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-          modifier = Modifier.height(28.dp),
+        OutlinedButton(
+          onClick = onAddExit,
+          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+          modifier = Modifier.weight(1f).height(32.dp),
         ) {
-          Text("Ajustar", style = MaterialTheme.typography.labelSmall)
+          Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(14.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("- Salida", style = MaterialTheme.typography.labelSmall)
+        }
+
+        Button(
+          onClick = onDispatch,
+          contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+          modifier = Modifier.weight(1.2f).height(32.dp),
+        ) {
+          Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(14.dp))
+          Spacer(modifier = Modifier.width(4.dp))
+          Text("Despachar", style = MaterialTheme.typography.labelSmall)
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun MetricColumnBox(
+  label: String,
+  value: String,
+  unit: String,
+  modifier: Modifier = Modifier,
+  textColor: Color = MaterialTheme.colorScheme.onSurface,
+  isHighlighted: Boolean = false,
+) {
+  Surface(
+    shape = RoundedCornerShape(8.dp),
+    color = if (isHighlighted) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+    modifier = modifier,
+  ) {
+    Column(
+      modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+      Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+      )
+      Text(
+        text = value,
+        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (isHighlighted) FontWeight.Bold else FontWeight.SemiBold),
+        color = textColor,
+        maxLines = 1,
+      )
+      Text(
+        text = unit,
+        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+      )
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// TOTAL DE IMPORTE AL FINAL (TARJETA PROMINENTE DE CIERRE)
+// -------------------------------------------------------------
+@Composable
+private fun WarehouseTotalSummaryCard(
+  totalImporte: Double,
+  totalInicio: Double,
+  totalEntradas: Double,
+  totalSalidas: Double,
+  totalDisponibles: Double,
+  itemCount: Int,
+) {
+  ElevatedCard(
+    modifier = Modifier
+      .fillMaxWidth()
+      .padding(top = 8.dp, bottom = 24.dp)
+      .testTag("warehouse_total_summary_card"),
+    colors = CardDefaults.elevatedCardColors(
+      containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
+    ),
+    shape = RoundedCornerShape(16.dp),
+  ) {
+    Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .padding(18.dp),
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(
+            Icons.Default.Calculate,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(24.dp),
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "Total de Importe en Almacén",
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+          )
+        }
+
+        Surface(
+          shape = RoundedCornerShape(6.dp),
+          color = MaterialTheme.colorScheme.primary,
+        ) {
+          Text(
+            text = "$itemCount productos",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(10.dp))
+
+      // Importe total destacado
+      Text(
+        text = WarehouseStockItem.formatMoneyDouble(totalImporte),
+        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.ExtraBold),
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.testTag("warehouse_total_importe_value"),
+      )
+
+      Text(
+        text = "Valor monetario consolidado: Disponible total × Costos unitarios",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+      )
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Desglose de unidades
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = MaterialTheme.colorScheme.surface,
+          modifier = Modifier.weight(1f),
+        ) {
+          Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Inicio Acumulado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(String.format("%,.0f", totalInicio), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold))
+          }
+        }
+
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = MaterialTheme.colorScheme.surface,
+          modifier = Modifier.weight(1f),
+        ) {
+          Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Entradas (+)", style = MaterialTheme.typography.labelSmall, color = SuccessGreen)
+            Text(String.format("%,.0f", totalEntradas), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = SuccessGreen))
+          }
+        }
+
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = MaterialTheme.colorScheme.surface,
+          modifier = Modifier.weight(1f),
+        ) {
+          Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Salidas (-)", style = MaterialTheme.typography.labelSmall, color = DangerRed)
+            Text(String.format("%,.0f", totalSalidas), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = DangerRed))
+          }
+        }
+
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = MaterialTheme.colorScheme.surface,
+          modifier = Modifier.weight(1.1f),
+        ) {
+          Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Disponible Total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            Text(String.format("%,.0f", totalDisponibles), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary))
+          }
         }
       }
     }
@@ -699,7 +1124,7 @@ private fun WarehouseStockItemCard(
 }
 
 // -------------------------------------------------------------
-// TAB 2: Despachar a Local (Envío de Stock)
+// TAB 2: Despachar a Local (Envío de Stock a Locales)
 // -------------------------------------------------------------
 @Composable
 private fun WarehouseDispatchTab(
@@ -707,6 +1132,7 @@ private fun WarehouseDispatchTab(
   selectedWarehouse: Warehouse?,
   projects: List<Project>,
   stockItems: List<WarehouseStockItem>,
+  initialProductId: Long?,
   onSelectWarehouse: (Long) -> Unit,
   onDispatch: (warehouseId: Long, projectId: Long, productId: Long, quantity: Double, notes: String) -> Unit,
 ) {
@@ -716,14 +1142,15 @@ private fun WarehouseDispatchTab(
   var selectedProjectId by remember(projects) {
     mutableStateOf(projects.firstOrNull()?.id ?: 1L)
   }
-  var selectedProductId by remember(stockItems) {
-    mutableStateOf(stockItems.firstOrNull()?.productId ?: 0L)
+  var selectedProductId by remember(stockItems, initialProductId) {
+    val initial = initialProductId?.takeIf { pId -> stockItems.any { it.productId == pId } }
+    mutableStateOf(initial ?: stockItems.firstOrNull()?.productId ?: 0L)
   }
   var quantityText by remember { mutableStateOf("45") }
   var notesText by remember { mutableStateOf("") }
 
   val currentItem = stockItems.find { it.productId == selectedProductId }
-  val currentAvailableStock = currentItem?.currentStock ?: 0.0
+  val currentAvailableStock = currentItem?.let { it.initialStock + it.entries - it.exits } ?: 0.0
   val quantityToDispatch = quantityText.toDoubleOrNull() ?: 0.0
   val remainingStock = currentAvailableStock - quantityToDispatch
   val isExceeding = quantityToDispatch > currentAvailableStock
@@ -731,6 +1158,8 @@ private fun WarehouseDispatchTab(
 
   val targetProject = projects.find { it.id == selectedProjectId }
   val originWarehouse = warehouses.find { it.id == selectedWarehouseId }
+  val costUnit = currentItem?.let { if (it.costPrice > 0.0) it.costPrice else it.costPriceCents / 100.0 } ?: 0.0
+  val dispatchAmount = quantityToDispatch * costUnit
 
   LazyColumn(
     contentPadding = PaddingValues(16.dp),
@@ -744,11 +1173,11 @@ private fun WarehouseDispatchTab(
       ) {
         Column(modifier = Modifier.padding(16.dp)) {
           Text(
-            text = "Envío y Despacho de Productos",
+            text = "Envío y Despacho de Stock a Locales",
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
           )
           Text(
-            text = "Envía mercadería desde un almacén directamente al stock disponible del local seleccionado.",
+            text = "Transfiere mercadería desde los almacenes centrales a los inventarios de venta de cada local. Si el producto no existe en el local, se creará automáticamente en su stock.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
@@ -801,7 +1230,7 @@ private fun WarehouseDispatchTab(
                           Color(android.graphics.Color.parseColor(proj.colorHex))
                         } catch (_: Exception) {
                           MaterialTheme.colorScheme.primary
-                        }
+                        },
                       ),
                   )
                 },
@@ -827,11 +1256,12 @@ private fun WarehouseDispatchTab(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               items(stockItems) { stockItem ->
                 val isSel = stockItem.productId == selectedProductId
+                val available = stockItem.initialStock + stockItem.entries - stockItem.exits
                 FilterChip(
                   selected = isSel,
                   onClick = { selectedProductId = stockItem.productId },
                   label = {
-                    Text("${stockItem.productName} (${stockItem.currentStock.toInt()} ${stockItem.unitOfMeasure})")
+                    Text("${stockItem.productName} (${available.toInt()} ${stockItem.unitOfMeasure})")
                   },
                 )
               }
@@ -840,7 +1270,7 @@ private fun WarehouseDispatchTab(
 
           Spacer(modifier = Modifier.height(16.dp))
 
-          // 4. Cantidad a Despachar
+          // 4. Cantidad a Despachar (Salida del almacén)
           Text(
             text = "4. Cantidad de Salida",
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
@@ -950,12 +1380,44 @@ private fun WarehouseDispatchTab(
                 )
               }
 
-              Spacer(modifier = Modifier.height(4.dp))
-              Text(
-                text = "Se añadirán ${quantityToDispatch.toInt()} unidades a las entradas de hoy en \"${targetProject?.name ?: "Local"}\".",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-              )
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+              ) {
+                Text("Importe del despacho:", style = MaterialTheme.typography.bodySmall)
+                Text(
+                  WarehouseStockItem.formatMoneyDouble(dispatchAmount),
+                  fontWeight = FontWeight.Bold,
+                  color = MaterialTheme.colorScheme.primary,
+                )
+              }
+
+              Spacer(modifier = Modifier.height(8.dp))
+
+              // Nota de creación automática en el local
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth(),
+              ) {
+                Row(
+                  modifier = Modifier.padding(8.dp),
+                  verticalAlignment = Alignment.CenterVertically,
+                ) {
+                  Icon(
+                    Icons.Default.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                  )
+                  Spacer(modifier = Modifier.width(6.dp))
+                  Text(
+                    text = "Se agregarán ${quantityToDispatch.toInt()} unidades a \"${targetProject?.name ?: "Local"}\". Si el producto no estaba en este local, se creará automáticamente en su stock.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                  )
+                }
+              }
             }
           }
 
@@ -1110,9 +1572,449 @@ private fun WarehouseDispatchesHistoryTab(
 }
 
 // -------------------------------------------------------------
-// DIÁLOGOS
+// DIÁLOGO: CREAR / EDITAR PRODUCTO EN ALMACÉN (8 CAMPOS)
+// - Producto (texto)
+// - Unidad (texto)
+// - Inicio (número)
+// - entrada (número)
+// - salida (número)
+// - disponible (número, calculado: inicio + entrada - salida)
+// - costo (número)
+// - importe (número, calculado: disponible * costo)
 // -------------------------------------------------------------
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WarehouseStockItemDialog(
+  item: WarehouseStockItem?,
+  catalogProducts: List<Product>,
+  onDismiss: () -> Unit,
+  onConfirm: (
+    productId: Long?,
+    productName: String,
+    unitOfMeasure: String,
+    initialStock: Double,
+    entries: Double,
+    exits: Double,
+    costPrice: Double,
+  ) -> Unit,
+) {
+  var productName by remember { mutableStateOf(item?.productName ?: "") }
+  var unitOfMeasure by remember { mutableStateOf(item?.unitOfMeasure ?: "U") }
+  var initialStockText by remember { mutableStateOf(item?.let { String.format(java.util.Locale.US, "%.0f", it.initialStock) } ?: "0") }
+  var entriesText by remember { mutableStateOf(item?.let { String.format(java.util.Locale.US, "%.0f", it.entries) } ?: "0") }
+  var exitsText by remember { mutableStateOf(item?.let { String.format(java.util.Locale.US, "%.0f", it.exits) } ?: "0") }
+  var costText by remember {
+    val cost = item?.let { if (it.costPrice > 0.0) it.costPrice else it.costPriceCents / 100.0 } ?: 0.0
+    mutableStateOf(if (cost > 0.0) String.format(java.util.Locale.US, "%.2f", cost) else "")
+  }
+
+  // Cálculos dinámicos en tiempo real
+  val inicioVal = initialStockText.toDoubleOrNull() ?: 0.0
+  val entradaVal = entriesText.toDoubleOrNull() ?: 0.0
+  val salidaVal = exitsText.toDoubleOrNull() ?: 0.0
+  val costoVal = costText.toDoubleOrNull() ?: 0.0
+
+  val disponibleCalculado = inicioVal + entradaVal - salidaVal
+  val importeCalculado = disponibleCalculado * costoVal
+  val isDisponibleNegative = disponibleCalculado < 0
+  val isFormValid = productName.isNotBlank() && unitOfMeasure.isNotBlank() &&
+    inicioVal >= 0 && entradaVal >= 0 && salidaVal >= 0 && costoVal >= 0 && !isDisponibleNegative
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    icon = {
+      ProductIconView(
+        productName = productName.ifBlank { "Producto" },
+        size = 46.dp,
+        iconSize = 26.dp,
+      )
+    },
+    title = {
+      Text(if (item == null) "Nuevo Producto en Almacén" else "Editar Producto en Almacén")
+    },
+    text = {
+      LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        // 1. Campo: Producto (campo de texto)
+        item {
+          OutlinedTextField(
+            value = productName,
+            onValueChange = { productName = it },
+            label = { Text("Producto (Nombre) *") },
+            placeholder = { Text("ej. Cerveza Cristal, Refresco TuKola") },
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("stock_dialog_product_name"),
+          )
+        }
+
+        // Sugerencias rápidas de productos existentes del catálogo
+        if (item == null && catalogProducts.isNotEmpty()) {
+          item {
+            Text("O seleccionar del catálogo:", style = MaterialTheme.typography.labelSmall)
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+              items(catalogProducts.take(6)) { catProd ->
+                FilterChip(
+                  selected = productName.equals(catProd.name, ignoreCase = true),
+                  onClick = {
+                    productName = catProd.name
+                    unitOfMeasure = catProd.unitOfMeasure
+                    costText = String.format(java.util.Locale.US, "%.2f", catProd.costPriceCents / 100.0)
+                  },
+                  label = { Text(catProd.name, style = MaterialTheme.typography.labelSmall) },
+                )
+              }
+            }
+          }
+        }
+
+        // 2. Campo: Unidad (campo de texto)
+        item {
+          OutlinedTextField(
+            value = unitOfMeasure,
+            onValueChange = { unitOfMeasure = it },
+            label = { Text("Unidad de Medida *") },
+            placeholder = { Text("ej. U, Botella, Lata, Caja, Kg") },
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("stock_dialog_unit_input"),
+          )
+
+          // Chips rápidos de unidades
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(top = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            listOf("U", "Botella", "Lata", "Caja", "Kg").forEach { unit ->
+              FilterChip(
+                selected = unitOfMeasure.equals(unit, ignoreCase = true),
+                onClick = { unitOfMeasure = unit },
+                label = { Text(unit, style = MaterialTheme.typography.labelSmall) },
+              )
+            }
+          }
+        }
+
+        // 3. Campo: Inicio (campo de números)
+        item {
+          OutlinedTextField(
+            value = initialStockText,
+            onValueChange = { initialStockText = it },
+            label = { Text("Inicio (Stock Inicial) *") },
+            placeholder = { Text("0") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("stock_dialog_initial_input"),
+          )
+        }
+
+        // 4. Campo: Entrada (campo de números)
+        item {
+          OutlinedTextField(
+            value = entriesText,
+            onValueChange = { entriesText = it },
+            label = { Text("Entrada (Reabastecimientos) *") },
+            placeholder = { Text("0") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("stock_dialog_entries_input"),
+          )
+        }
+
+        // 5. Campo: Salida (campo de números)
+        item {
+          OutlinedTextField(
+            value = exitsText,
+            onValueChange = { exitsText = it },
+            label = { Text("Salida (Despachos / Consumos) *") },
+            placeholder = { Text("0") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("stock_dialog_exits_input"),
+          )
+        }
+
+        // 6. Campo: Costo (campo de números)
+        item {
+          OutlinedTextField(
+            value = costText,
+            onValueChange = { costText = it },
+            label = { Text("Costo Unitario ($) *") },
+            placeholder = { Text("ej. 4.50") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+              .fillMaxWidth()
+              .testTag("stock_dialog_cost_input"),
+          )
+        }
+
+        // 7 y 8. PANEL DE CÁLCULO EN TIEMPO REAL: DISPONIBLE E IMPORTE
+        item {
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = if (isDisponibleNegative) DangerRed.copy(alpha = 0.12f)
+            else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+              Text(
+                text = "Fórmulas Calculadas en Tiempo Real:",
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.primary,
+              )
+              Spacer(modifier = Modifier.height(4.dp))
+
+              // Fórmula 1: disponible = inicio + entrada - salida
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+              ) {
+                Text("Disponible (inicio + entrada - salida):", style = MaterialTheme.typography.bodySmall)
+                Text(
+                  text = "${String.format("%,.1f", disponibleCalculado)} $unitOfMeasure",
+                  style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                  color = if (isDisponibleNegative) DangerRed else SuccessGreen,
+                )
+              }
+
+              Spacer(modifier = Modifier.height(4.dp))
+
+              // Fórmula 2: importe = disponibilidad * costo
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+              ) {
+                Text("Importe (disponible × costo):", style = MaterialTheme.typography.bodySmall)
+                Text(
+                  text = WarehouseStockItem.formatMoneyDouble(importeCalculado),
+                  style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                  color = MaterialTheme.colorScheme.primary,
+                )
+              }
+
+              if (isDisponibleNegative) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                  text = "Error: La salida no puede ser mayor que inicio + entrada.",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = DangerRed,
+                )
+              }
+            }
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = {
+          if (isFormValid) {
+            onConfirm(
+              item?.productId,
+              productName.trim(),
+              unitOfMeasure.trim(),
+              inicioVal,
+              entradaVal,
+              salidaVal,
+              costoVal,
+            )
+          }
+        },
+        enabled = isFormValid,
+        modifier = Modifier.testTag("stock_dialog_confirm_button"),
+      ) {
+        Text("Guardar Producto")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancelar")
+      }
+    },
+  )
+}
+
+// -------------------------------------------------------------
+// DIÁLOGO: ENTRADA RÁPIDA (+ Entrada)
+// -------------------------------------------------------------
+@Composable
+private fun QuickStockEntryDialog(
+  item: WarehouseStockItem,
+  onDismiss: () -> Unit,
+  onConfirm: (quantity: Double) -> Unit,
+) {
+  var quantityText by remember { mutableStateOf("10") }
+  val quantity = quantityText.toDoubleOrNull() ?: 0.0
+  val currentAvailable = item.initialStock + item.entries - item.exits
+  val newAvailable = currentAvailable + quantity
+  val cost = if (item.costPrice > 0.0) item.costPrice else item.costPriceCents / 100.0
+  val newImporte = newAvailable * cost
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Registrar Entrada de Mercadería") },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+          text = "Producto: ${item.productName}",
+          style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+        )
+        Text(
+          text = "Disponible actual: ${currentAvailable.toInt()} ${item.unitOfMeasure}",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        OutlinedTextField(
+          value = quantityText,
+          onValueChange = { quantityText = it },
+          label = { Text("Cantidad a Añadir a Entradas *") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          shape = RoundedCornerShape(10.dp),
+          modifier = Modifier.fillMaxWidth(),
+        )
+
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Column(modifier = Modifier.padding(10.dp)) {
+            Text(
+              text = "Nuevo disponible: ${newAvailable.toInt()} ${item.unitOfMeasure}",
+              style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+              color = SuccessGreen,
+            )
+            Text(
+              text = "Nuevo importe: ${WarehouseStockItem.formatMoneyDouble(newImporte)}",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.primary,
+            )
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = { if (quantity > 0) onConfirm(quantity) },
+        enabled = quantity > 0,
+      ) {
+        Text("Añadir Entrada")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancelar")
+      }
+    },
+  )
+}
+
+// -------------------------------------------------------------
+// DIÁLOGO: SALIDA RÁPIDA (- Salida)
+// -------------------------------------------------------------
+@Composable
+private fun QuickStockExitDialog(
+  item: WarehouseStockItem,
+  onDismiss: () -> Unit,
+  onConfirm: (quantity: Double) -> Unit,
+) {
+  var quantityText by remember { mutableStateOf("10") }
+  val quantity = quantityText.toDoubleOrNull() ?: 0.0
+  val currentAvailable = item.initialStock + item.entries - item.exits
+  val newAvailable = currentAvailable - quantity
+  val isExceeding = quantity > currentAvailable
+  val cost = if (item.costPrice > 0.0) item.costPrice else item.costPriceCents / 100.0
+  val newImporte = (if (newAvailable > 0) newAvailable else 0.0) * cost
+
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    title = { Text("Registrar Salida de Mercadería") },
+    text = {
+      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+          text = "Producto: ${item.productName}",
+          style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+        )
+        Text(
+          text = "Disponible actual: ${currentAvailable.toInt()} ${item.unitOfMeasure}",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        OutlinedTextField(
+          value = quantityText,
+          onValueChange = { quantityText = it },
+          label = { Text("Cantidad a Deducir en Salidas *") },
+          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+          isError = isExceeding,
+          supportingText = {
+            if (isExceeding) {
+              Text("No puedes salir más unidades que el disponible ($currentAvailable)", color = DangerRed)
+            }
+          },
+          shape = RoundedCornerShape(10.dp),
+          modifier = Modifier.fillMaxWidth(),
+        )
+
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = if (isExceeding) DangerRed.copy(alpha = 0.12f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Column(modifier = Modifier.padding(10.dp)) {
+            Text(
+              text = "Nuevo disponible: ${newAvailable.toInt()} ${item.unitOfMeasure}",
+              style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+              color = if (isExceeding) DangerRed else MaterialTheme.colorScheme.primary,
+            )
+            Text(
+              text = "Nuevo importe: ${WarehouseStockItem.formatMoneyDouble(newImporte)}",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.primary,
+            )
+          }
+        }
+      }
+    },
+    confirmButton = {
+      Button(
+        onClick = { if (quantity > 0 && !isExceeding) onConfirm(quantity) },
+        enabled = quantity > 0 && !isExceeding,
+        colors = ButtonDefaults.buttonColors(containerColor = DangerRed),
+      ) {
+        Text("Confirmar Salida")
+      }
+    },
+    dismissButton = {
+      TextButton(onClick = onDismiss) {
+        Text("Cancelar")
+      }
+    },
+  )
+}
+
+// -------------------------------------------------------------
+// DIÁLOGO: CREAR / EDITAR ALMACÉN
+// -------------------------------------------------------------
 @Composable
 private fun WarehouseFormDialog(
   warehouse: Warehouse?,
@@ -1181,131 +2083,6 @@ private fun WarehouseFormDialog(
         modifier = Modifier.testTag("warehouse_dialog_confirm_button"),
       ) {
         Text("Guardar")
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) {
-        Text("Cancelar")
-      }
-    },
-  )
-}
-
-@Composable
-private fun AddStockDialog(
-  item: WarehouseStockItem,
-  products: List<Product>,
-  onDismiss: () -> Unit,
-  onConfirm: (productId: Long, quantity: Double, minAlert: Double?) -> Unit,
-) {
-  var selectedProdId by remember { mutableStateOf(item.productId) }
-  var quantityText by remember { mutableStateOf("50") }
-  var minAlertText by remember { mutableStateOf(item.minAlertStock.toInt().toString()) }
-
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text("Añadir Stock a Almacén") },
-    text = {
-      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-          text = "Producto: ${item.productName}",
-          style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-        )
-        Text(
-          text = "Stock actual: ${item.currentStock.toInt()} ${item.unitOfMeasure}",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        OutlinedTextField(
-          value = quantityText,
-          onValueChange = { quantityText = it },
-          label = { Text("Cantidad a Ingresar *") },
-          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-          shape = RoundedCornerShape(10.dp),
-          modifier = Modifier.fillMaxWidth(),
-        )
-
-        OutlinedTextField(
-          value = minAlertText,
-          onValueChange = { minAlertText = it },
-          label = { Text("Alerta de Stock Mínimo") },
-          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-          shape = RoundedCornerShape(10.dp),
-          modifier = Modifier.fillMaxWidth(),
-        )
-      }
-    },
-    confirmButton = {
-      Button(
-        onClick = {
-          val qty = quantityText.toDoubleOrNull() ?: 0.0
-          val minA = minAlertText.toDoubleOrNull()
-          if (qty > 0) {
-            onConfirm(selectedProdId, qty, minA)
-          }
-        },
-      ) {
-        Text("Añadir Stock")
-      }
-    },
-    dismissButton = {
-      TextButton(onClick = onDismiss) {
-        Text("Cancelar")
-      }
-    },
-  )
-}
-
-@Composable
-private fun AdjustStockDialog(
-  item: WarehouseStockItem,
-  onDismiss: () -> Unit,
-  onConfirm: (newStock: Double, minAlert: Double?) -> Unit,
-) {
-  var stockText by remember { mutableStateOf(item.currentStock.toInt().toString()) }
-  var minAlertText by remember { mutableStateOf(item.minAlertStock.toInt().toString()) }
-
-  AlertDialog(
-    onDismissRequest = onDismiss,
-    title = { Text("Ajustar Stock del Producto") },
-    text = {
-      Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-          text = "Producto: ${item.productName}",
-          style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-        )
-
-        OutlinedTextField(
-          value = stockText,
-          onValueChange = { stockText = it },
-          label = { Text("Stock Físico Real *") },
-          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-          shape = RoundedCornerShape(10.dp),
-          modifier = Modifier.fillMaxWidth(),
-        )
-
-        OutlinedTextField(
-          value = minAlertText,
-          onValueChange = { minAlertText = it },
-          label = { Text("Alerta de Stock Mínimo") },
-          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-          shape = RoundedCornerShape(10.dp),
-          modifier = Modifier.fillMaxWidth(),
-        )
-      }
-    },
-    confirmButton = {
-      Button(
-        onClick = {
-          val newStock = stockText.toDoubleOrNull()
-          val minA = minAlertText.toDoubleOrNull()
-          if (newStock != null && newStock >= 0) {
-            onConfirm(newStock, minA)
-          }
-        },
-      ) {
-        Text("Guardar Ajuste")
       }
     },
     dismissButton = {

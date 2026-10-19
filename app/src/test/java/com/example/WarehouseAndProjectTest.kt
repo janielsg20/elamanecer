@@ -121,4 +121,79 @@ class WarehouseAndProjectTest {
     val dispatches = repository.getAllDispatches().first()
     assertTrue(dispatches.any { it.id == dispatch.id && it.quantity == 45.0 })
   }
+
+  @Test
+  fun testWarehouseStockFormulasAndCalculations() = runBlocking {
+    repository.seedInitialDataIfEmpty()
+    val warehouses = repository.getAllWarehouses().first()
+    val warehouse = warehouses.first()
+
+    // 1. Guardar un nuevo producto en almacén con los 8 campos:
+    // Producto: "Jugo de Naranja 1L", Unidad: "Caja", Inicio: 100, Entrada: 50, Salida: 20, Costo: 3.50
+    val savedId = repository.saveWarehouseStockItem(
+      warehouseId = warehouse.id,
+      productId = null,
+      productName = "Jugo de Naranja 1L",
+      unitOfMeasure = "Caja",
+      initialStock = 100.0,
+      entries = 50.0,
+      exits = 20.0,
+      costPrice = 3.50,
+      minAlertStock = 15.0,
+    )
+    assertTrue(savedId > 0)
+
+    val stockItems = repository.getWarehouseStock(warehouse.id).first()
+    val jugoItem = checkNotNull(stockItems.find { it.productName == "Jugo de Naranja 1L" })
+
+    // Validar fórmula: disponible = inicio + entrada - salida (100 + 50 - 20 = 130)
+    assertEquals(100.0, jugoItem.initialStock, 0.001)
+    assertEquals(50.0, jugoItem.entries, 0.001)
+    assertEquals(20.0, jugoItem.exits, 0.001)
+    assertEquals(130.0, jugoItem.availableStock, 0.001)
+    assertEquals(130.0, jugoItem.currentStock, 0.001)
+    assertEquals(3.50, jugoItem.costPrice, 0.001)
+
+    // Validar fórmula: importe = disponible * costo (130 * 3.50 = 455.0)
+    assertEquals(455.0, jugoItem.totalAmount, 0.001)
+    assertEquals("$455.00", jugoItem.totalAmountFormatted)
+
+    // 2. Probar entrada rápida (+20)
+    repository.addWarehouseStockEntry(warehouse.id, jugoItem.productId, 20.0)
+    val afterEntry = repository.getWarehouseStock(warehouse.id).first().find { it.productId == jugoItem.productId }!!
+    assertEquals(70.0, afterEntry.entries, 0.001)
+    assertEquals(150.0, afterEntry.availableStock, 0.001) // 100 + 70 - 20 = 150
+    assertEquals(525.0, afterEntry.totalAmount, 0.001) // 150 * 3.50 = 525.0
+
+    // 3. Probar salida rápida (-10)
+    repository.addWarehouseStockExit(warehouse.id, jugoItem.productId, 10.0)
+    val afterExit = repository.getWarehouseStock(warehouse.id).first().find { it.productId == jugoItem.productId }!!
+    assertEquals(30.0, afterExit.exits, 0.001)
+    assertEquals(140.0, afterExit.availableStock, 0.001) // 100 + 70 - 30 = 140
+    assertEquals(490.0, afterExit.totalAmount, 0.001) // 140 * 3.50 = 490.0
+
+    // 4. Probar despacho a un local donde el producto no existía en su sesión
+    val projects = repository.getAllProjects().first()
+    val barProject = projects.find { it.type == "BAR" }!!
+
+    val dispatch = repository.dispatchStockToProject(
+      warehouseId = warehouse.id,
+      projectId = barProject.id,
+      productId = jugoItem.productId,
+      quantity = 25.0,
+      notes = "Despacho jugo al bar",
+    )
+    assertEquals(25.0, dispatch.quantity, 0.001)
+    assertEquals(115.0, dispatch.remainingStockInWarehouse, 0.001)
+
+    // Verificar que en el local (proyecto) se creó la entrada en su sesión diaria
+    val todayStr = com.example.domain.model.DateHelper.getTodayDateString()
+    val session = repository.getSessionByDate(todayStr, barProject.id)
+    assertNotNull(session)
+    val localItems = repository.getSessionInventoryItems(session!!.id).first()
+    val localJugo = localItems.find { it.productId == jugoItem.productId }
+    assertNotNull(localJugo)
+    assertEquals(25.0, localJugo!!.entries, 0.001)
+    assertEquals(25.0, localJugo.closingStock, 0.001)
+  }
 }

@@ -46,8 +46,20 @@ El sistema digitaliza el proceso:
 - [x] **Apertura y Cierre Dinámico en Dashboard:** Botones adaptativos en Dashboard para "Cerrar Jornada" (con diálogo informativo) o "Abrir Jornada (Hoy)" y "Elegir Fecha en Calendario" cuando no hay sesión abierta, más opción de reabrir.
 - [x] **Creación Flexible de Jornadas (Hoy / Calendario):** Soporte en Dashboard e Inventario para abrir jornadas hoy o seleccionando en calendario M3 (`AppDatePickerDialog`).
 - [x] **Filtro por Calendario en Historial y Reportes:** Selección de fecha en calendario para filtrar jornadas, con banner de filtro activo, chip rápido, botón para limpiar filtro y creación rápida en caso de no existir registros.
-- [x] **FASE 13 — Proyectos Independientes de Gestión y Sección de Almacenes:**
-  - **Proyectos de Gestión (Kiosko, Bar, Paladar, Otro):** CRUD completo para proyectos (crear, editar, eliminar, asignar color/tipo). Selector activo en Dashboard que conmuta métricas, ventas, inventario y jornadas reactivamente.
-  - **Sección de Almacenes Centrales:** Gestión de almacenes (Kioskos, Bar, Paladar, General). Control de stock en almacén, entradas de reabastecimiento y alertas de stock mínimo.
-  - **Despacho y Envío de Stock a Proyectos:** Módulo de transferencia con cálculo en tiempo real (*"Salida: 45 unidades de Refrescos para Kiosko, quedan X en almacén"*), sumando automáticamente la mercadería a las entradas de la sesión activa del proyecto destino y registrando el historial completo de envíos.
+- [x] **FASE 14 — Gestor de Inventario de Almacén con 8 Campos e Integración de Despachos a Locales:**
+  - **Campos Estructurados de Almacén:** Cada producto cuenta con Producto (texto), Unidad (texto), Inicio (número), Entrada (número), Salida (número), Disponible (número = Inicio + Entrada - Salida), Costo (número) e Importe (número = Disponible × Costo).
+  - **Fórmulas Dinámicas en Tiempo Real:** Validación preventiva en UI y diálogos modales para garantizar consistencia matemática ($Disponible = Inicio + Entrada - Salida$, $Importe = Disponible \times Costo$).
+  - **Total de Importe al Final:** Tarjeta destacada al pie de la lista de almacén mostrando el Total de Importe consolidado ($\sum Importe$), unidades totales disponibles, acumulado de entradas y salidas.
+  - **Gestor CRUD y Entradas/Salidas Rápidas:** Creación y edición integral de productos de almacén, accesos rápidos para `+ Entrada` y `- Salida`, y opción de eliminación.
+- [x] **FASE 15 — Optimización y Corrección Integral del Sistema de Descarga Automática de Iconos:**
+  - **Sincronización Reactiva en Tiempo Real:** Implementación de `downloadedIcons: StateFlow<Map<String, ImageVector>>` en `ProductIconManager`. Todos los composables `ProductIconView` se suscriben reactivamente y se actualizan al instante en cuanto cualquier icono termina de descargarse en segundo plano sin requerir recargar la pantalla ni reiniciar la app.
+  - **Eliminación de Condiciones de Carrera (Race Conditions):** Uso de `Mutex` concurrente por nombre de icono para sincronizar descargas paralelas y evitar colisiones de hilos.
+  - **Guardado Atómico de Archivos Vectoriales:** Escritura en archivo temporal `.tmp` con renombramiento atómico a `.xml` en almacenamiento interno (`context.filesDir/product_icons/`), garantizando que nunca se lean archivos parciales o corruptos.
+  - **Carga Inmediata al Inicio:** Carga local en caliente (`loadExistingLocalIcons`) de todos los iconos guardados en disco al iniciar la aplicación, evitando re-descargas y eliminando el lag.
+  - **Pre-descarga Concurrente (No Bloqueante):** Descargas en paralelo con `coroutineScope` y `async` para que los 21 iconos comerciales se descarguen en menos de 1.5 segundos.
+  - **Prevención de Envenenamiento de Caché:** Fallbacks vectoriales seguros que no contaminan la caché de memoria si ocurre un corte transitorio de red, permitiendo reintentos automáticos.
+  - **Diccionario Enriquecido y Normalizado:** Detección de productos comerciales en español con eliminación de tildes (Maní, Ron, Cerveza Cristal, Refresco TuKola, Pasta Dental, Encendedor, etc.).
+  - **Previsualización en Diálogos y Botón de Sincronización:** Vista previa dinámica en tiempo real del icono al crear/editar productos en Catálogo y Almacén, más botón de sincronización directa en la barra superior.
+  - **Cobertura de Pruebas:** 100% de tests unitarios y Robolectric aprobados en `ProductIconManagerTest`.
+
 

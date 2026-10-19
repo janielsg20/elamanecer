@@ -203,6 +203,117 @@ class WarehouseViewModel(
     }
   }
 
+  fun saveWarehouseStockItem(
+    warehouseId: Long,
+    productId: Long?,
+    productName: String,
+    unitOfMeasure: String,
+    initialStock: Double,
+    entries: Double,
+    exits: Double,
+    costPrice: Double,
+    minAlertStock: Double? = null,
+  ) {
+    viewModelScope.launch {
+      try {
+        if (productName.isBlank()) {
+          _uiState.value = _uiState.value.copy(errorMessage = "El nombre del producto es obligatorio")
+          return@launch
+        }
+        if (initialStock < 0 || entries < 0 || exits < 0 || costPrice < 0) {
+          _uiState.value = _uiState.value.copy(errorMessage = "Los valores numéricos no pueden ser negativos")
+          return@launch
+        }
+        val available = initialStock + entries - exits
+        if (available < 0) {
+          _uiState.value = _uiState.value.copy(
+            errorMessage = "El disponible (Inicio + Entrada - Salida = $available) no puede ser negativo",
+          )
+          return@launch
+        }
+        repository.saveWarehouseStockItem(
+          warehouseId = warehouseId,
+          productId = productId,
+          productName = productName.trim(),
+          unitOfMeasure = unitOfMeasure.trim().ifBlank { "U" },
+          initialStock = initialStock,
+          entries = entries,
+          exits = exits,
+          costPrice = costPrice,
+          minAlertStock = minAlertStock,
+        )
+        val importe = available * costPrice
+        val formattedImporte = WarehouseStockItem.formatMoneyDouble(importe)
+        _uiState.value = _uiState.value.copy(
+          successMessage = "Producto \"$productName\" guardado. Disponible: $available, Importe: $formattedImporte",
+          errorMessage = null,
+        )
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = e.message ?: "Error al guardar producto en almacén")
+      }
+    }
+  }
+
+  fun addStockEntry(warehouseId: Long, productId: Long, quantity: Double) {
+    viewModelScope.launch {
+      try {
+        if (quantity <= 0) {
+          _uiState.value = _uiState.value.copy(errorMessage = "La cantidad de entrada debe ser mayor a 0")
+          return@launch
+        }
+        repository.addWarehouseStockEntry(warehouseId, productId, quantity)
+        val item = _uiState.value.stockItems.find { it.productId == productId }
+        _uiState.value = _uiState.value.copy(
+          successMessage = "+$quantity ${item?.unitOfMeasure ?: "U"} añadidas a entradas de \"${item?.productName ?: "Producto"}\"",
+          errorMessage = null,
+        )
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = e.message ?: "Error al registrar entrada")
+      }
+    }
+  }
+
+  fun addStockExit(warehouseId: Long, productId: Long, quantity: Double) {
+    viewModelScope.launch {
+      try {
+        if (quantity <= 0) {
+          _uiState.value = _uiState.value.copy(errorMessage = "La cantidad de salida debe ser mayor a 0")
+          return@launch
+        }
+        val item = _uiState.value.stockItems.find { it.productId == productId }
+        val available = item?.availableStock ?: item?.currentStock ?: 0.0
+        if (quantity > available) {
+          _uiState.value = _uiState.value.copy(
+            errorMessage = "La salida solicitada ($quantity) excede el stock disponible ($available)",
+          )
+          return@launch
+        }
+        repository.addWarehouseStockExit(warehouseId, productId, quantity)
+        _uiState.value = _uiState.value.copy(
+          successMessage = "Salida de $quantity ${item?.unitOfMeasure ?: "U"} registrada para \"${item?.productName ?: "Producto"}\"",
+          errorMessage = null,
+        )
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = e.message ?: "Error al registrar salida")
+      }
+    }
+  }
+
+  fun deleteWarehouseStockItem(warehouseId: Long, productId: Long) {
+    viewModelScope.launch {
+      try {
+        val item = _uiState.value.stockItems.find { it.productId == productId }
+        repository.deleteWarehouseStockItem(warehouseId, productId)
+        _uiState.value = _uiState.value.copy(
+          successMessage = "Producto \"${item?.productName ?: "Producto"}\" eliminado del almacén",
+          errorMessage = null,
+        )
+      } catch (e: Exception) {
+        _uiState.value = _uiState.value.copy(errorMessage = e.message ?: "Error al eliminar producto del almacén")
+      }
+    }
+  }
+
   fun addStock(warehouseId: Long, productId: Long, quantity: Double, minAlert: Double? = null) {
     viewModelScope.launch {
       try {

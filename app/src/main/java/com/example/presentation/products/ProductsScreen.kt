@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.ToggleOff
 import androidx.compose.material.icons.filled.ToggleOn
 import androidx.compose.material.icons.filled.Warning
+import com.example.domain.icon.ProductIconManager
 import com.example.domain.icon.ProductIconView
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -61,10 +63,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,6 +89,8 @@ fun ProductsScreen(
 ) {
   val uiState by viewModel.uiState.collectAsState()
   val snackbarHostState = remember { SnackbarHostState() }
+  val context = LocalContext.current
+  val scope = rememberCoroutineScope()
 
   var editingProduct by remember { mutableStateOf<Product?>(null) }
   var productToDelete by remember { mutableStateOf<Product?>(null) }
@@ -118,6 +125,19 @@ fun ProductsScreen(
         },
         actions = {
           ThemeToggleIconButton()
+          IconButton(
+            onClick = {
+              scope.launch {
+                snackbarHostState.showSnackbar("Sincronizando iconos de productos...")
+                ProductIconManager.preloadDefaultIcons(context)
+                val count = ProductIconManager.getDownloadedIconsCount(context)
+                snackbarHostState.showSnackbar("Iconos actualizados: $count/${ProductIconManager.ALL_SUPPORTED_ICONS.size} guardados localmente")
+              }
+            },
+            modifier = Modifier.testTag("btn_sync_icons"),
+          ) {
+            Icon(Icons.Default.CloudDownload, contentDescription = "Descargar Iconos", modifier = Modifier.size(22.dp))
+          }
           IconButton(
             onClick = { isManagingCategories = true },
             modifier = Modifier.testTag("btn_manage_categories"),
@@ -332,7 +352,13 @@ fun ProductsScreen(
         editingProduct = null
       },
       icon = {
-        Icon(Icons.Default.Inventory2, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        val selectedCategory = uiState.categories.find { it.id == selectedCatId }?.name
+        ProductIconView(
+          productName = nameInput.ifBlank { "Producto" },
+          categoryName = selectedCategory,
+          size = 46.dp,
+          iconSize = 26.dp,
+        )
       },
       title = { Text(if (initialProd == null) "Nuevo Producto" else "Editar Producto", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)) },
       text = {

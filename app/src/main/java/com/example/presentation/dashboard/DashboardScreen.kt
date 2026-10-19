@@ -135,25 +135,10 @@ fun DashboardScreen(
 
   Scaffold(
     topBar = {
-      TopAppBar(
-        title = {
-          Column {
-            Text(
-              text = currentProject?.name ?: "Control de Ventas",
-              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-              text = activeSession?.let { "Jornada: ${it.dateString} (${if (isOpen) "Abierta" else "Cerrada"})" }
-                ?: "Sin jornada activa",
-              style = MaterialTheme.typography.bodySmall,
-              color = if (isOpen) SuccessGreen else MaterialTheme.colorScheme.onSurfaceVariant,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-          }
-        },
+      val subtitle = activeSession?.let { "Jornada: ${it.dateString} (${if (isOpen) "Abierta" else "Cerrada"})" }
+        ?: (currentProject?.name ?: "Panel Principal")
+      com.example.ui.components.ElAmanecerTopBar(
+        subtitle = subtitle,
         actions = {
           // Selector de local en barra superior
           FilledTonalButton(
@@ -180,9 +165,6 @@ fun DashboardScreen(
           }
           ThemeToggleIconButton()
         },
-        colors = TopAppBarDefaults.topAppBarColors(
-          containerColor = MaterialTheme.colorScheme.surface,
-        ),
       )
     },
     snackbarHost = { SnackbarHost(snackbarHostState) },

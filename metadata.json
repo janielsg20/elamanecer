@@ -1,6 +1,6 @@
 {
-  "name": "Control de Ventas",
-  "description": "Sistema profesional de inventario, ventas diarias, utilidades y cierres",
+  "name": "El Amanecer",
+  "description": "Sistema profesional de inventario, ventas diarias, utilidades y cierres para El Amanecer",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

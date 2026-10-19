@@ -126,7 +126,11 @@ interface WarehouseDao {
       ws.initialStock, ws.entries, ws.exits,
       COALESCE(NULLIF(ws.costPriceCents, 0), p.costPriceCents) AS costPriceCents,
       p.salePriceCents,
-      (ws.initialStock + ws.entries - ws.exits) AS currentStock,
+      CASE 
+        WHEN ws.initialStock != 0.0 OR ws.entries != 0.0 OR ws.exits != 0.0 
+        THEN (ws.initialStock + ws.entries - ws.exits) 
+        ELSE ws.currentStock 
+      END AS currentStock,
       ws.minAlertStock, ws.updatedAt
     FROM warehouse_stock ws
     INNER JOIN products p ON ws.productId = p.id

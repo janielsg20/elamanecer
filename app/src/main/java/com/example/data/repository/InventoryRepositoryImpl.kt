@@ -146,6 +146,14 @@ class InventoryRepositoryImpl(
   override fun getWarehouseStock(warehouseId: Long): Flow<List<WarehouseStockItem>> {
     return warehouseDao.getStockForWarehouse(warehouseId).map { queryResults ->
       queryResults.map { qr ->
+        val available = if (qr.initialStock != 0.0 || qr.entries != 0.0 || qr.exits != 0.0) {
+          qr.initialStock + qr.entries - qr.exits
+        } else {
+          qr.currentStock
+        }
+        val cost = qr.costPriceCents / 100.0
+        val total = available * cost
+        val totalCents = (total * 100).toLong()
         WarehouseStockItem(
           id = qr.id,
           warehouseId = qr.warehouseId,
@@ -153,14 +161,163 @@ class InventoryRepositoryImpl(
           productName = qr.productName,
           categoryName = qr.categoryName,
           unitOfMeasure = qr.unitOfMeasure,
+          initialStock = qr.initialStock,
+          entries = qr.entries,
+          exits = qr.exits,
+          availableStock = available,
+          costPrice = cost,
           costPriceCents = qr.costPriceCents,
           salePriceCents = qr.salePriceCents,
-          currentStock = qr.currentStock,
+          totalAmount = total,
+          totalAmountCents = totalCents,
+          currentStock = available,
           minAlertStock = qr.minAlertStock,
           updatedAt = qr.updatedAt,
         )
       }
     }.flowOn(Dispatchers.IO)
+  }
+
+  override suspend fun saveWarehouseStockItem(
+    warehouseId: Long,
+    productId: Long?,
+    productName: String,
+    unitOfMeasure: String,
+    initialStock: Double,
+    entries: Double,
+    exits: Double,
+    costPrice: Double,
+    minAlertStock: Double?,
+  ): Long = withContext(Dispatchers.IO) {
+    val costPriceCents = (costPrice * 100).toLong()
+    val finalProductId: Long = if (productId != null && productId > 0) {
+      productId
+    } else {
+      val cursor = database.openHelper.readableDatabase.query(
+        "SELECT id FROM products WHERE name = ? LIMIT 1",
+        arrayOf(productName.trim()),
+      )
+      val existingId = if (cursor.moveToFirst()) cursor.getLong(0) else null
+      cursor.close()
+
+      existingId ?: run {
+        val catCursor = database.openHelper.readableDatabase.query("SELECT id FROM categories LIMIT 1")
+        val catId = if (catCursor.moveToFirst()) catCursor.getLong(0) else 1L
+        catCursor.close()
+        productDao.insert(
+          ProductEntity(
+            categoryId = catId,
+            name = productName.trim(),
+            unitOfMeasure = unitOfMeasure.ifBlank { "U" },
+            costPriceCents = costPriceCents,
+            salePriceCents = costPriceCents,
+            minStock = minAlertStock ?: 10.0,
+          ),
+        )
+      }
+    }
+
+    val available = initialStock + entries - exits
+    val existing = warehouseDao.getStockItem(warehouseId, finalProductId)
+    if (existing != null) {
+      val updatedAlert = minAlertStock ?: existing.minAlertStock
+      val updated = existing.copy(
+        initialStock = initialStock,
+        entries = entries,
+        exits = exits,
+        currentStock = available,
+        costPriceCents = costPriceCents,
+        minAlertStock = updatedAlert,
+        updatedAt = System.currentTimeMillis(),
+      )
+      warehouseDao.updateStock(updated)
+      existing.id
+    } else {
+      warehouseDao.insertStock(
+        WarehouseStockEntity(
+          warehouseId = warehouseId,
+          productId = finalProductId,
+          initialStock = initialStock,
+          entries = entries,
+          exits = exits,
+          currentStock = available,
+          costPriceCents = costPriceCents,
+          minAlertStock = minAlertStock ?: 10.0,
+          updatedAt = System.currentTimeMillis(),
+        ),
+      )
+    }
+  }
+
+  override suspend fun addWarehouseStockEntry(
+    warehouseId: Long,
+    productId: Long,
+    quantity: Double,
+  ): Unit = withContext(Dispatchers.IO) {
+    require(quantity >= 0) { "La cantidad no puede ser negativa" }
+    val existing = warehouseDao.getStockItem(warehouseId, productId)
+    if (existing != null) {
+      val newEntries = existing.entries + quantity
+      val newCurrent = existing.initialStock + newEntries - existing.exits
+      warehouseDao.updateStock(
+        existing.copy(
+          entries = newEntries,
+          currentStock = newCurrent,
+          updatedAt = System.currentTimeMillis(),
+        ),
+      )
+    } else {
+      warehouseDao.insertStock(
+        WarehouseStockEntity(
+          warehouseId = warehouseId,
+          productId = productId,
+          initialStock = 0.0,
+          entries = quantity,
+          exits = 0.0,
+          currentStock = quantity,
+          updatedAt = System.currentTimeMillis(),
+        ),
+      )
+    }
+  }
+
+  override suspend fun addWarehouseStockExit(
+    warehouseId: Long,
+    productId: Long,
+    quantity: Double,
+  ): Unit = withContext(Dispatchers.IO) {
+    require(quantity >= 0) { "La cantidad no puede ser negativa" }
+    val existing = warehouseDao.getStockItem(warehouseId, productId)
+    if (existing != null) {
+      val newExits = existing.exits + quantity
+      val newCurrent = existing.initialStock + existing.entries - newExits
+      warehouseDao.updateStock(
+        existing.copy(
+          exits = newExits,
+          currentStock = newCurrent,
+          updatedAt = System.currentTimeMillis(),
+        ),
+      )
+    } else {
+      warehouseDao.insertStock(
+        WarehouseStockEntity(
+          warehouseId = warehouseId,
+          productId = productId,
+          initialStock = 0.0,
+          entries = 0.0,
+          exits = quantity,
+          currentStock = -quantity,
+          updatedAt = System.currentTimeMillis(),
+        ),
+      )
+    }
+  }
+
+  override suspend fun deleteWarehouseStockItem(
+    warehouseId: Long,
+    productId: Long,
+  ): Unit = withContext(Dispatchers.IO) {
+    warehouseDao.deleteStockItem(warehouseId, productId)
   }
 
   override suspend fun addWarehouseStock(
@@ -172,24 +329,29 @@ class InventoryRepositoryImpl(
     require(additionalQuantity >= 0) { "La cantidad agregada no puede ser negativa" }
     val existing = warehouseDao.getStockItem(warehouseId, productId)
     if (existing != null) {
-      val newStock = existing.currentStock + additionalQuantity
+      val newEntries = existing.entries + additionalQuantity
+      val newStock = existing.initialStock + newEntries - existing.exits
       val updatedAlert = minAlert ?: existing.minAlertStock
       warehouseDao.updateStock(
         existing.copy(
+          entries = newEntries,
           currentStock = newStock,
           minAlertStock = updatedAlert,
           updatedAt = System.currentTimeMillis(),
-        )
+        ),
       )
     } else {
       warehouseDao.insertStock(
         WarehouseStockEntity(
           warehouseId = warehouseId,
           productId = productId,
+          initialStock = 0.0,
+          entries = additionalQuantity,
+          exits = 0.0,
           currentStock = additionalQuantity,
           minAlertStock = minAlert ?: 10.0,
           updatedAt = System.currentTimeMillis(),
-        )
+        ),
       )
     }
   }
@@ -206,20 +368,26 @@ class InventoryRepositoryImpl(
       val updatedAlert = minAlert ?: existing.minAlertStock
       warehouseDao.updateStock(
         existing.copy(
+          initialStock = newStock,
+          entries = 0.0,
+          exits = 0.0,
           currentStock = newStock,
           minAlertStock = updatedAlert,
           updatedAt = System.currentTimeMillis(),
-        )
+        ),
       )
     } else {
       warehouseDao.insertStock(
         WarehouseStockEntity(
           warehouseId = warehouseId,
           productId = productId,
+          initialStock = newStock,
+          entries = 0.0,
+          exits = 0.0,
           currentStock = newStock,
           minAlertStock = minAlert ?: 10.0,
           updatedAt = System.currentTimeMillis(),
-        )
+        ),
       )
     }
   }
@@ -240,12 +408,19 @@ class InventoryRepositoryImpl(
 
     if (stockItem.currentStock < quantity) {
       throw IllegalArgumentException(
-        "Stock insuficiente en almacén. Disponible: ${stockItem.currentStock}, Solicitado: $quantity"
+        "Stock insuficiente en almacén. Disponible: ${stockItem.currentStock}, Solicitado: $quantity",
       )
     }
 
     val remaining = stockItem.currentStock - quantity
-    warehouseDao.updateStockQuantity(warehouseId, productId, remaining, System.currentTimeMillis())
+    val newExits = stockItem.exits + quantity
+    warehouseDao.updateStock(
+      stockItem.copy(
+        exits = newExits,
+        currentStock = remaining,
+        updatedAt = System.currentTimeMillis(),
+      ),
+    )
 
     val todayStr = DateHelper.getTodayDateString()
     val todayEpoch = DateHelper.getTodayEpochDay()
@@ -729,46 +904,46 @@ class InventoryRepositoryImpl(
     // 4. Stock en Almacenes
     // Stock en Almacén Kioskos
     val stockKioskos = listOf(
-      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[0], currentStock = 300.0, minAlertStock = 48.0),
-      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[1], currentStock = 250.0, minAlertStock = 48.0),
-      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[2], currentStock = 120.0, minAlertStock = 24.0),
-      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[3], currentStock = 500.0, minAlertStock = 100.0),
-      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[4], currentStock = 200.0, minAlertStock = 36.0),
-      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[5], currentStock = 150.0, minAlertStock = 30.0),
-      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[6], currentStock = 200.0, minAlertStock = 30.0),
-      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[7], currentStock = 180.0, minAlertStock = 20.0),
-      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[8], currentStock = 220.0, minAlertStock = 25.0),
-      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[9], currentStock = 100.0, minAlertStock = 20.0),
+      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[0], initialStock = 300.0, currentStock = 300.0, minAlertStock = 48.0),
+      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[1], initialStock = 250.0, currentStock = 250.0, minAlertStock = 48.0),
+      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[2], initialStock = 120.0, currentStock = 120.0, minAlertStock = 24.0),
+      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[3], initialStock = 500.0, currentStock = 500.0, minAlertStock = 100.0),
+      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[4], initialStock = 200.0, currentStock = 200.0, minAlertStock = 36.0),
+      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[5], initialStock = 150.0, currentStock = 150.0, minAlertStock = 30.0),
+      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[6], initialStock = 200.0, currentStock = 200.0, minAlertStock = 30.0),
+      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[7], initialStock = 180.0, currentStock = 180.0, minAlertStock = 20.0),
+      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[8], initialStock = 220.0, currentStock = 220.0, minAlertStock = 25.0),
+      WarehouseStockEntity(warehouseId = warehouseKioskosId, productId = insertedProductIds[9], initialStock = 100.0, currentStock = 100.0, minAlertStock = 20.0),
     )
     warehouseDao.insertAllStock(stockKioskos)
 
     // Stock en Almacén Bar
     val stockBar = listOf(
-      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[0], currentStock = 600.0, minAlertStock = 80.0),
-      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[1], currentStock = 450.0, minAlertStock = 60.0),
-      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[2], currentStock = 300.0, minAlertStock = 40.0),
-      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[3], currentStock = 400.0, minAlertStock = 50.0),
-      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[4], currentStock = 250.0, minAlertStock = 30.0),
-      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[5], currentStock = 80.0, minAlertStock = 15.0),
-      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[6], currentStock = 120.0, minAlertStock = 20.0),
-      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[7], currentStock = 100.0, minAlertStock = 15.0),
-      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[8], currentStock = 100.0, minAlertStock = 15.0),
-      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[9], currentStock = 50.0, minAlertStock = 10.0),
+      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[0], initialStock = 600.0, currentStock = 600.0, minAlertStock = 80.0),
+      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[1], initialStock = 450.0, currentStock = 450.0, minAlertStock = 60.0),
+      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[2], initialStock = 300.0, currentStock = 300.0, minAlertStock = 40.0),
+      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[3], initialStock = 400.0, currentStock = 400.0, minAlertStock = 50.0),
+      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[4], initialStock = 250.0, currentStock = 250.0, minAlertStock = 30.0),
+      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[5], initialStock = 80.0, currentStock = 80.0, minAlertStock = 15.0),
+      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[6], initialStock = 120.0, currentStock = 120.0, minAlertStock = 20.0),
+      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[7], initialStock = 100.0, currentStock = 100.0, minAlertStock = 15.0),
+      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[8], initialStock = 100.0, currentStock = 100.0, minAlertStock = 15.0),
+      WarehouseStockEntity(warehouseId = warehouseBarId, productId = insertedProductIds[9], initialStock = 50.0, currentStock = 50.0, minAlertStock = 10.0),
     )
     warehouseDao.insertAllStock(stockBar)
 
     // Stock en Almacén Paladar
     val stockPaladar = listOf(
-      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[0], currentStock = 200.0, minAlertStock = 30.0),
-      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[1], currentStock = 150.0, minAlertStock = 25.0),
-      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[2], currentStock = 100.0, minAlertStock = 20.0),
-      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[3], currentStock = 350.0, minAlertStock = 50.0),
-      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[4], currentStock = 300.0, minAlertStock = 40.0),
-      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[5], currentStock = 250.0, minAlertStock = 40.0),
-      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[6], currentStock = 180.0, minAlertStock = 30.0),
-      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[7], currentStock = 50.0, minAlertStock = 10.0),
-      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[8], currentStock = 50.0, minAlertStock = 10.0),
-      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[9], currentStock = 30.0, minAlertStock = 5.0),
+      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[0], initialStock = 200.0, currentStock = 200.0, minAlertStock = 30.0),
+      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[1], initialStock = 150.0, currentStock = 150.0, minAlertStock = 25.0),
+      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[2], initialStock = 100.0, currentStock = 100.0, minAlertStock = 20.0),
+      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[3], initialStock = 350.0, currentStock = 350.0, minAlertStock = 50.0),
+      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[4], initialStock = 300.0, currentStock = 300.0, minAlertStock = 40.0),
+      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[5], initialStock = 250.0, currentStock = 250.0, minAlertStock = 40.0),
+      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[6], initialStock = 180.0, currentStock = 180.0, minAlertStock = 30.0),
+      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[7], initialStock = 50.0, currentStock = 50.0, minAlertStock = 10.0),
+      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[8], initialStock = 50.0, currentStock = 50.0, minAlertStock = 10.0),
+      WarehouseStockEntity(warehouseId = warehousePaladarId, productId = insertedProductIds[9], initialStock = 30.0, currentStock = 30.0, minAlertStock = 5.0),
     )
     warehouseDao.insertAllStock(stockPaladar)
 
